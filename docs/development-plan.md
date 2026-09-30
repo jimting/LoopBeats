@@ -1,6 +1,10 @@
 # Web Loopstation development plan
 
-Repository planning baseline adapted from the supplied development plan. This roadmap is not an approved behavior specification. Issue generation is explicitly deferred.
+Repository planning baseline adapted from the supplied development plan. Issue generation is explicitly deferred.
+
+## Confirmed milestone update (2026-09-30)
+
+The confirmed design in [first-usable-milestone.md](architecture/first-usable-milestone.md) governs the first usable version. It supersedes the original single-track-first product milestone and later-only sequencing of overdub, shared transport and mixing below: deliver two synchronized tracks, independent One-shot playback, overdubbing, mixing and settings through small slices, then expand to five. Historical phase descriptions below are roadmap context; do not use them to override the confirmed behavior. Foundation tooling and browser/WASM spikes remain prerequisites. See ADR-0001 for shared-cycle alignment.
 
 ## Product and priorities
 

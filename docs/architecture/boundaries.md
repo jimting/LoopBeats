@@ -8,4 +8,4 @@ React owns controls, accessibility, meters and approximate visual progress. Engi
 
 No cross-package runtime dependencies are wired yet. Future UI imports should pass through audio-client; Rust must not depend on frontend packages. Treat block length as supplied by the host, not a hardcoded UI assumption.
 
-Mute and stop are distinct; mute advances silently. State-machine details, channel format, command scheduling, capacity, clipping and transport restart semantics remain specification decisions.
+The confirmed first-usable milestone defines two tracks, mono capture, a 60-second initial-recording limit, engine-owned cycle alignment, independent One-shot playback and immediate additive overdubbing. Mute advances silently; Track stop retains audio while Transport stop resets the shared position. See `first-usable-milestone.md` and ADR-0001 for the confirmed product semantics. Buffer strategy, command protocol, clipping algorithm and browser/runtime feasibility still require technical specification or research.

@@ -46,6 +46,6 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 
 ## Repository and connector support
 
-Repository: `ty-jt-agent/LoopBeats`. Upstream: `jimting/LoopBeats`. Track development issues in this fork unless the user explicitly requests upstream publication. When GitHub connector tools are available, use their equivalent operations instead of requiring `gh`; preserve the same issue bodies, labels and dependencies. Use authenticated `gh` in CLI environments. Do not silently switch to local markdown on authentication failure. Use `--body-file` for multiline CLI bodies.
+Primary repository: `ty-jt-agent/LoopBeats`. Use it for branches, issues, pushes and pull requests. Do not target `jimting/LoopBeats` unless explicitly requested. When GitHub connector tools are available, use their equivalent operations instead of requiring `gh`; preserve the same issue bodies, labels and dependencies. Use authenticated `gh` in CLI environments. Do not silently switch to local markdown on authentication failure. Use `--body-file` for multiline CLI bodies.
 
-Issue generation is deferred until the user explicitly invokes it. Read `docs/development-plan.md` as planning input, resolve open decisions before declaring tickets ready, and ask for review of the dependency graph before publishing. A planned phase is not an approved specification.
+Issue generation is deferred until the user explicitly invokes it. Read `docs/architecture/first-usable-milestone.md` as the confirmed behavior and `docs/development-plan.md` as roadmap context, resolve open decisions before declaring tickets ready, and ask for review of the dependency graph before publishing. A planned phase is not an approved specification.
