@@ -1,0 +1,9 @@
+node_modules/
+dist/
+target/
+playwright-report/
+test-results/
+.scratch/
+.env
+.env.*
+!.env.example

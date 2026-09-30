@@ -1,0 +1,16 @@
+{
+  "name": "loopbeats",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "check:scaffold": "node scripts/check-scaffold.mjs"
+  }
+}
