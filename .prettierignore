@@ -1,0 +1,10 @@
+node_modules
+dist
+target
+package-lock.json
+Cargo.lock
+playwright-report
+test-results
+.agents/skills
+docs
+GLOSSARY.md

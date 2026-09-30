@@ -48,4 +48,6 @@ Setup is complete for GitHub, default triage vocabulary, and shared domain docs.
 
 ## Current verification status
 
-This setup contains directory and workspace scaffolding only. React/Vite, TypeScript, ESLint, Prettier, Vitest, Playwright, WASM tooling and CI are future foundation work. Do not claim `npm test`, lint, typecheck, web build or browser tests are configured. `npm run check:scaffold` verifies the checked-in structure. `cargo check --workspace` checks the empty Rust scaffold when Rust is installed. No loop engine behavior exists yet.
+The React/Vite shell, TypeScript, ESLint, Prettier, Vitest, Playwright, Rust/WASM build and CI are configured. Run `npm run check`, `npm run test:browser`, `cargo fmt --all -- --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, `cargo test --locked --workspace` and `npm run build:wasm`. Install Chromium with `npx playwright install --with-deps chromium` first. See `docs/development.md`.
+
+Vitest covers the observable application shell; Playwright tests the production build. The Rust engine remains empty: Cargo currently runs zero behavioral tests. Do not claim audio correctness from foundation checks. Start deterministic engine tests when engine behavior is introduced.
