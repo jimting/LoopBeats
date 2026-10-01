@@ -1,0 +1,371 @@
+{
+  "offline": {
+    "date": "2026-10-01T01:19:38.963Z",
+    "results": [
+      {
+        "seconds": 30,
+        "wallMilliseconds": 79.5,
+        "wallToAudioRatio": 0.00265,
+        "samples": [
+          0.25,
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "snapshot": {
+          "frames": 1440000,
+          "blocks": 11250,
+          "failures": 0,
+          "initialMemoryBytes": 1114112,
+          "memoryBytes": 1114112,
+          "minBlockFrames": 128,
+          "maxBlockFrames": 128,
+          "inputRms": 0.5,
+          "outputRms": 0.25,
+          "gain": 0.5,
+          "sampleRate": 48000
+        }
+      },
+      {
+        "seconds": 30,
+        "wallMilliseconds": 77.69999999925494,
+        "wallToAudioRatio": 0.0025899999999751647,
+        "samples": [
+          0.25,
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "snapshot": {
+          "frames": 1440000,
+          "blocks": 11250,
+          "failures": 0,
+          "initialMemoryBytes": 1114112,
+          "memoryBytes": 1114112,
+          "minBlockFrames": 128,
+          "maxBlockFrames": 128,
+          "inputRms": 0.5,
+          "outputRms": 0.25,
+          "gain": 0.5,
+          "sampleRate": 48000
+        }
+      },
+      {
+        "seconds": 30,
+        "wallMilliseconds": 68.40000000037253,
+        "wallToAudioRatio": 0.0022800000000124175,
+        "samples": [
+          0.25,
+          0.25,
+          0.25,
+          0.25,
+          0.25
+        ],
+        "snapshot": {
+          "frames": 1440000,
+          "blocks": 11250,
+          "failures": 0,
+          "initialMemoryBytes": 1114112,
+          "memoryBytes": 1114112,
+          "minBlockFrames": 128,
+          "maxBlockFrames": 128,
+          "inputRms": 0.5,
+          "outputRms": 0.25,
+          "gain": 0.5,
+          "sampleRate": 48000
+        }
+      }
+    ]
+  },
+  "realtime": {
+    "date": "2026-10-01T01:20:00.837Z",
+    "browser": "145.0.7632.6",
+    "input": "Chromium fake media, not physical hardware",
+    "reports": [
+      {
+        "before": {
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "secureContext": true,
+          "failures": [],
+          "stage": "connect-input",
+          "sampleRate": 44100,
+          "baseLatencySeconds": 0.01,
+          "outputLatencySeconds": 0.03,
+          "inputSettings": {
+            "autoGainControl": false,
+            "channelCount": 2,
+            "deviceId": "default",
+            "echoCancellation": false,
+            "groupId": "a2897b17775ccef5774ecf4deb9409a08b742a9308e92648444558db853cdacf",
+            "latency": 0.01,
+            "noiseSuppression": false,
+            "sampleRate": 44100,
+            "sampleSize": 16,
+            "voiceIsolation": false
+          },
+          "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+          "contextState": "running",
+          "monitoring": true,
+          "outputRms": 0.012693810196396198,
+          "worklet": {
+            "frames": 264576,
+            "blocks": 2067,
+            "failures": 0,
+            "initialMemoryBytes": 1114112,
+            "memoryBytes": 1114112,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "inputRms": 0.13571347863250383,
+            "outputRms": 0.06785673931625191,
+            "gain": 0.5,
+            "sampleRate": 44100
+          },
+          "outputMeter": {
+            "frames": 264576,
+            "blocks": 2067,
+            "inputRms": 0.012944153337408318,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "sampleRate": 44100
+          }
+        },
+        "after": {
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "secureContext": true,
+          "failures": [],
+          "stage": "connect-input",
+          "sampleRate": 44100,
+          "baseLatencySeconds": 0.01,
+          "outputLatencySeconds": 0.03,
+          "inputSettings": {
+            "autoGainControl": false,
+            "channelCount": 2,
+            "deviceId": "default",
+            "echoCancellation": false,
+            "groupId": "a2897b17775ccef5774ecf4deb9409a08b742a9308e92648444558db853cdacf",
+            "latency": 0.01,
+            "noiseSuppression": false,
+            "sampleRate": 44100,
+            "sampleSize": 16,
+            "voiceIsolation": false
+          },
+          "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+          "contextState": "running",
+          "monitoring": true,
+          "outputRms": 0,
+          "worklet": {
+            "frames": 308608,
+            "blocks": 2411,
+            "failures": 0,
+            "initialMemoryBytes": 1114112,
+            "memoryBytes": 1114112,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "inputRms": 0.13614272039011818,
+            "outputRms": 0.06807136019505909,
+            "gain": 0.5,
+            "sampleRate": 44100
+          },
+          "outputMeter": {
+            "frames": 308608,
+            "blocks": 2411,
+            "inputRms": 0.013080169676952438,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "sampleRate": 44100
+          }
+        }
+      },
+      {
+        "before": {
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "secureContext": true,
+          "failures": [],
+          "stage": "connect-input",
+          "sampleRate": 44100,
+          "baseLatencySeconds": 0.01,
+          "outputLatencySeconds": 0.03,
+          "inputSettings": {
+            "autoGainControl": false,
+            "channelCount": 2,
+            "deviceId": "default",
+            "echoCancellation": false,
+            "groupId": "a8cf88e2c914821b3cd073018144667a4c006e435b9bd2e4cfdfbda83b5ee160",
+            "latency": 0.01,
+            "noiseSuppression": false,
+            "sampleRate": 44100,
+            "sampleSize": 16,
+            "voiceIsolation": false
+          },
+          "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+          "contextState": "running",
+          "monitoring": true,
+          "outputRms": 0,
+          "worklet": {
+            "frames": 264576,
+            "blocks": 2067,
+            "failures": 0,
+            "initialMemoryBytes": 1114112,
+            "memoryBytes": 1114112,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "inputRms": 0.13525317155638875,
+            "outputRms": 0.06762658577819437,
+            "gain": 0.5,
+            "sampleRate": 44100
+          },
+          "outputMeter": {
+            "frames": 264576,
+            "blocks": 2067,
+            "inputRms": 0.012895884107746777,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "sampleRate": 44100
+          }
+        },
+        "after": {
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "secureContext": true,
+          "failures": [],
+          "stage": "connect-input",
+          "sampleRate": 44100,
+          "baseLatencySeconds": 0.01,
+          "outputLatencySeconds": 0.03,
+          "inputSettings": {
+            "autoGainControl": false,
+            "channelCount": 2,
+            "deviceId": "default",
+            "echoCancellation": false,
+            "groupId": "a8cf88e2c914821b3cd073018144667a4c006e435b9bd2e4cfdfbda83b5ee160",
+            "latency": 0.01,
+            "noiseSuppression": false,
+            "sampleRate": 44100,
+            "sampleSize": 16,
+            "voiceIsolation": false
+          },
+          "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+          "contextState": "running",
+          "monitoring": true,
+          "outputRms": 0,
+          "worklet": {
+            "frames": 308736,
+            "blocks": 2412,
+            "failures": 0,
+            "initialMemoryBytes": 1114112,
+            "memoryBytes": 1114112,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "inputRms": 0.13611449550738713,
+            "outputRms": 0.06805724775369357,
+            "gain": 0.5,
+            "sampleRate": 44100
+          },
+          "outputMeter": {
+            "frames": 308736,
+            "blocks": 2412,
+            "inputRms": 0.013077457917894178,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "sampleRate": 44100
+          }
+        }
+      },
+      {
+        "before": {
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "secureContext": true,
+          "failures": [],
+          "stage": "connect-input",
+          "sampleRate": 44100,
+          "baseLatencySeconds": 0.01,
+          "outputLatencySeconds": 0.03,
+          "inputSettings": {
+            "autoGainControl": false,
+            "channelCount": 2,
+            "deviceId": "default",
+            "echoCancellation": false,
+            "groupId": "dbda48bb5866ea83c7faeb178e660d829193e382ee9598c17e98628c834dff45",
+            "latency": 0.01,
+            "noiseSuppression": false,
+            "sampleRate": 44100,
+            "sampleSize": 16,
+            "voiceIsolation": false
+          },
+          "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+          "contextState": "running",
+          "monitoring": true,
+          "outputRms": 0,
+          "worklet": {
+            "frames": 264576,
+            "blocks": 2067,
+            "failures": 0,
+            "initialMemoryBytes": 1114112,
+            "memoryBytes": 1114112,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "inputRms": 0.13525317155638875,
+            "outputRms": 0.06762658577819437,
+            "gain": 0.5,
+            "sampleRate": 44100
+          },
+          "outputMeter": {
+            "frames": 264576,
+            "blocks": 2067,
+            "inputRms": 0.012895884107746777,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "sampleRate": 44100
+          }
+        },
+        "after": {
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.7632.6 Safari/537.36",
+          "secureContext": true,
+          "failures": [],
+          "stage": "connect-input",
+          "sampleRate": 44100,
+          "baseLatencySeconds": 0.01,
+          "outputLatencySeconds": 0.03,
+          "inputSettings": {
+            "autoGainControl": false,
+            "channelCount": 2,
+            "deviceId": "default",
+            "echoCancellation": false,
+            "groupId": "dbda48bb5866ea83c7faeb178e660d829193e382ee9598c17e98628c834dff45",
+            "latency": 0.01,
+            "noiseSuppression": false,
+            "sampleRate": 44100,
+            "sampleSize": 16,
+            "voiceIsolation": false
+          },
+          "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+          "contextState": "running",
+          "monitoring": true,
+          "outputRms": 0,
+          "worklet": {
+            "frames": 308608,
+            "blocks": 2411,
+            "failures": 0,
+            "initialMemoryBytes": 1114112,
+            "memoryBytes": 1114112,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "inputRms": 0.13614272039011818,
+            "outputRms": 0.06807136019505909,
+            "gain": 0.5,
+            "sampleRate": 44100
+          },
+          "outputMeter": {
+            "frames": 308608,
+            "blocks": 2411,
+            "inputRms": 0.013080169676952438,
+            "minBlockFrames": 128,
+            "maxBlockFrames": 128,
+            "sampleRate": 44100
+          }
+        }
+      }
+    ]
+  }
+}
