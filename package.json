@@ -22,7 +22,9 @@
     "test": "vitest run",
     "test:browser": "npm run build && playwright test",
     "build:wasm": "cargo build --locked --release --target wasm32-unknown-unknown -p loop-engine",
-    "check": "npm run check:scaffold && npm run typecheck && npm run lint && npm run format:check && npm test"
+    "check": "npm run check:scaffold && npm run typecheck && npm run lint && npm run format:check && npm test",
+    "spike:audio": "npm run dev -- --open /browser-audio-spike/index.html",
+    "spike:probe": "node scripts/browser-audio-probe.cjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
