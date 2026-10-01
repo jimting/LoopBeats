@@ -1,0 +1,222 @@
+{
+  "date": "2026-10-01T00:09:55.101Z",
+  "browser": "145.0.7632.6",
+  "input": "Chromium built-in fake-media input, not physical hardware",
+  "off": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+    "secureContext": true,
+    "failures": [],
+    "stage": "connect-input",
+    "sampleRate": 44100,
+    "baseLatencySeconds": 0.01,
+    "outputLatencySeconds": 0.03,
+    "inputSettings": {
+      "autoGainControl": false,
+      "channelCount": 2,
+      "deviceId": "default",
+      "echoCancellation": false,
+      "groupId": "5a0ddc9a9f9d288cb29bd8722aa159de2cd5ab38033d7a4bf332e4c0d8d9b4af",
+      "latency": 0.01,
+      "noiseSuppression": false,
+      "sampleRate": 44100,
+      "sampleSize": 16,
+      "voiceIsolation": false
+    },
+    "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+    "contextState": "running",
+    "monitoring": false,
+    "outputRms": 0,
+    "worklet": {
+      "frames": 22912,
+      "blocks": 179,
+      "inputRms": 0.13857817510172785,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    },
+    "outputMeter": {
+      "frames": 22912,
+      "blocks": 179,
+      "inputRms": 0,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    }
+  },
+  "on": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+    "secureContext": true,
+    "failures": [],
+    "stage": "connect-input",
+    "sampleRate": 44100,
+    "baseLatencySeconds": 0.01,
+    "outputLatencySeconds": 0.03,
+    "inputSettings": {
+      "autoGainControl": false,
+      "channelCount": 2,
+      "deviceId": "default",
+      "echoCancellation": false,
+      "groupId": "5a0ddc9a9f9d288cb29bd8722aa159de2cd5ab38033d7a4bf332e4c0d8d9b4af",
+      "latency": 0.01,
+      "noiseSuppression": false,
+      "sampleRate": 44100,
+      "sampleSize": 16,
+      "voiceIsolation": false
+    },
+    "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+    "contextState": "running",
+    "monitoring": true,
+    "outputRms": 0,
+    "worklet": {
+      "frames": 265472,
+      "blocks": 2074,
+      "inputRms": 0.1350247307609553,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    },
+    "outputMeter": {
+      "frames": 265472,
+      "blocks": 2074,
+      "inputRms": 0.02574820626438377,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    }
+  },
+  "busy": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+    "secureContext": true,
+    "failures": [],
+    "stage": "connect-input",
+    "sampleRate": 44100,
+    "baseLatencySeconds": 0.01,
+    "outputLatencySeconds": 0.03,
+    "inputSettings": {
+      "autoGainControl": false,
+      "channelCount": 2,
+      "deviceId": "default",
+      "echoCancellation": false,
+      "groupId": "5a0ddc9a9f9d288cb29bd8722aa159de2cd5ab38033d7a4bf332e4c0d8d9b4af",
+      "latency": 0.01,
+      "noiseSuppression": false,
+      "sampleRate": 44100,
+      "sampleSize": 16,
+      "voiceIsolation": false
+    },
+    "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+    "contextState": "running",
+    "monitoring": true,
+    "outputRms": 0,
+    "worklet": {
+      "frames": 298624,
+      "blocks": 2333,
+      "inputRms": 0.13839986298613913,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    },
+    "outputMeter": {
+      "frames": 298624,
+      "blocks": 2333,
+      "inputRms": 0.02659405785249856,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    }
+  },
+  "offAgain": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+    "secureContext": true,
+    "failures": [],
+    "stage": "connect-input",
+    "sampleRate": 44100,
+    "baseLatencySeconds": 0.01,
+    "outputLatencySeconds": 0.03,
+    "inputSettings": {
+      "autoGainControl": false,
+      "channelCount": 2,
+      "deviceId": "default",
+      "echoCancellation": false,
+      "groupId": "5a0ddc9a9f9d288cb29bd8722aa159de2cd5ab38033d7a4bf332e4c0d8d9b4af",
+      "latency": 0.01,
+      "noiseSuppression": false,
+      "sampleRate": 44100,
+      "sampleSize": 16,
+      "voiceIsolation": false
+    },
+    "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+    "contextState": "running",
+    "monitoring": false,
+    "outputRms": 0,
+    "worklet": {
+      "frames": 298624,
+      "blocks": 2333,
+      "inputRms": 0.13839986298613913,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    },
+    "outputMeter": {
+      "frames": 298624,
+      "blocks": 2333,
+      "inputRms": 0.02659405785249856,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    }
+  },
+  "stopped": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+    "secureContext": true,
+    "failures": [],
+    "stage": "connect-input",
+    "sampleRate": 44100,
+    "baseLatencySeconds": 0.01,
+    "outputLatencySeconds": 0.03,
+    "inputSettings": {
+      "autoGainControl": false,
+      "channelCount": 2,
+      "deviceId": "default",
+      "echoCancellation": false,
+      "groupId": "5a0ddc9a9f9d288cb29bd8722aa159de2cd5ab38033d7a4bf332e4c0d8d9b4af",
+      "latency": 0.01,
+      "noiseSuppression": false,
+      "sampleRate": 44100,
+      "sampleSize": 16,
+      "voiceIsolation": false
+    },
+    "latencyMeaning": "Browser-reported output diagnostics; not measured input-to-output latency.",
+    "contextState": "closed",
+    "monitoring": false,
+    "outputRms": 0,
+    "worklet": {
+      "frames": 298624,
+      "blocks": 2333,
+      "inputRms": 0.13839986298613913,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    },
+    "outputMeter": {
+      "frames": 298624,
+      "blocks": 2333,
+      "inputRms": 0.02659405785249856,
+      "minBlockFrames": 128,
+      "maxBlockFrames": 128,
+      "sampleRate": 44100
+    }
+  },
+  "denied": {
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+    "secureContext": true,
+    "failures": [
+      {
+        "name": "NotSupportedError",
+        "message": "Not supported"
+      }
+    ],
+    "stage": "request-input"
+  },
+  "pageErrors": []
+}

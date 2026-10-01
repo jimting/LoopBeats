@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LoopBeats browser audio spike</title>
+  <style>
+    body {
+      max-width: 52rem;
+      margin: 3rem auto;
+      padding: 1rem;
+      font: 1rem/1.5 system-ui;
+    }
+    button {
+      padding: 0.7rem;
+      margin: 0.3rem;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #eee;
+      padding: 1rem;
+    }
+  </style>
+  <h1>Browser audio spike — disposable experiment</h1>
+  <p>
+    Question: can microphone input pass through an AudioWorklet to browser
+    output with explicit monitoring?
+  </p>
+  <p>
+    Use wired headphones for a physical test. Monitoring starts off. This is not
+    the production loopstation.
+  </p>
+  <button id="start">Start microphone</button>
+  <button id="monitor" disabled>Enable monitoring</button>
+  <button id="stop" disabled>Stop audio</button>
+  <button id="export">Download diagnostics</button>
+  <p id="status" role="status">Not started</p>
+  <pre id="diagnostics">No observations yet.</pre>
+  <script type="module">
+    const startButton = document.querySelector('#start');
+    const monitorButton = document.querySelector('#monitor');
+    const stopButton = document.querySelector('#stop');
+    const status = document.querySelector('#status');
+    const display = document.querySelector('#diagnostics');
+    let context, stream, node, gain, analyser, outputMeter, interval;
+    let monitoring = false;
+    let samples;
+    const observations = {
+      userAgent: navigator.userAgent,
+      secureContext: isSecureContext,
+      failures: [],
+    };
+    const show = () => {
+      display.textContent = JSON.stringify(observations, null, 2);
+    };
+    const cleanup = async () => {
+      clearInterval(interval);
+      stream?.getTracks().forEach((track) => track.stop());
+      await context?.close();
+      context = stream = node = gain = analyser = outputMeter = undefined;
+      monitoring = false;
+      monitorButton.textContent = 'Enable monitoring';
+      monitorButton.disabled = stopButton.disabled = true;
+      startButton.disabled = false;
+    };
+    startButton.onclick = async () => {
+      startButton.disabled = true;
+      status.textContent = 'Requesting microphone';
+      try {
+        observations.stage = 'create-context';
+        context = new AudioContext({ latencyHint: 'interactive' });
+        observations.stage = 'resume-context';
+        await context.resume();
+        observations.stage = 'request-input';
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+        observations.stage = 'load-worklet';
+        await context.audioWorklet.addModule('./passthrough.js');
+        observations.stage = 'create-worklet';
+        node = new AudioWorkletNode(context, 'spike-passthrough', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [2],
+          channelCount: 1,
+          channelCountMode: 'explicit',
+        });
+        node.onprocessorerror = () => {
+          observations.failures.push({
+            name: 'processorerror',
+            message: 'Worklet failed; stop and restart.',
+          });
+          status.textContent = 'Worklet failed';
+          show();
+        };
+        gain = context.createGain();
+        gain.gain.value = 0;
+        analyser = context.createAnalyser();
+        samples = new Float32Array(analyser.fftSize);
+        observations.stage = 'connect-input';
+        context.createMediaStreamSource(stream).connect(node);
+        outputMeter = new AudioWorkletNode(context, 'spike-passthrough', {
+          outputChannelCount: [2],
+          channelCount: 1,
+          channelCountMode: 'explicit',
+        });
+        node
+          .connect(gain)
+          .connect(outputMeter)
+          .connect(analyser)
+          .connect(context.destination);
+        outputMeter.port.onmessage = (event) => {
+          observations.outputMeter = event.data;
+          show();
+        };
+        node.port.onmessage = (event) => {
+          observations.worklet = event.data;
+          show();
+        };
+        observations.sampleRate = context.sampleRate;
+        observations.baseLatencySeconds = context.baseLatency ?? null;
+        observations.outputLatencySeconds = context.outputLatency ?? null;
+        observations.inputSettings = stream.getAudioTracks()[0].getSettings();
+        observations.latencyMeaning =
+          'Browser-reported output diagnostics; not measured input-to-output latency.';
+        observations.contextState = context.state;
+        observations.monitoring = false;
+        status.textContent = 'Running — monitoring off';
+        monitorButton.disabled = stopButton.disabled = false;
+        // Diagnostic polling only; this timer does not schedule audio.
+        interval = setInterval(() => {
+          node.port.postMessage('snapshot');
+          outputMeter.port.postMessage('snapshot');
+          analyser.getFloatTimeDomainData(samples);
+          let energy = 0;
+          for (const value of samples) energy += value * value;
+          observations.outputRms = Math.sqrt(energy / samples.length);
+          observations.contextState = context.state;
+          show();
+        }, 250);
+        show();
+      } catch (error) {
+        observations.failures.push({
+          name: error.name,
+          message: error.message,
+        });
+        await cleanup();
+        status.textContent =
+          'Audio startup failed — check microphone permission and secure context, then retry.';
+        show();
+      }
+    };
+    monitorButton.onclick = () => {
+      monitoring = !monitoring;
+      gain.gain.setTargetAtTime(
+        monitoring ? 0.2 : 0,
+        context.currentTime,
+        0.005,
+      );
+      observations.monitoring = monitoring;
+      monitorButton.textContent = monitoring
+        ? 'Disable monitoring'
+        : 'Enable monitoring';
+      status.textContent = monitoring
+        ? 'Running — monitoring on'
+        : 'Running — monitoring off';
+      show();
+    };
+    stopButton.onclick = async () => {
+      await cleanup();
+      observations.contextState = 'closed';
+      observations.monitoring = false;
+      status.textContent = 'Stopped — microphone released';
+      show();
+    };
+    document.querySelector('#export').onclick = () => {
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(observations, null, 2)], {
+          type: 'application/json',
+        }),
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'browser-audio-spike.json';
+      link.click();
+      URL.revokeObjectURL(url);
+    };
+    window.addEventListener('pagehide', () =>
+      stream?.getTracks().forEach((track) => track.stop()),
+    );
+  </script>
+</html>
