@@ -5,7 +5,8 @@
   "type": "module",
   "dependencies": {
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "@loopbeats/audio-client": "*"
   },
   "scripts": {
     "dev": "vite",

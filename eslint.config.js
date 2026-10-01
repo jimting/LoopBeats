@@ -26,6 +26,17 @@ export default tseslint.config(
     },
   },
   {
+    files: ['packages/audio-client/src/processor.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: {
+        AudioWorkletProcessor: 'readonly',
+        registerProcessor: 'readonly',
+        WebAssembly: 'readonly',
+      },
+    },
+  },
+  {
     files: ['scripts/**/*.mjs', 'eslint.config.js'],
     extends: [js.configs.recommended],
     languageOptions: {

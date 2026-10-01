@@ -2,6 +2,10 @@
 
 Issue: [#6](https://github.com/ty-jt-agent/LoopBeats/issues/6). Observed 2026-10-01.
 
+## Manual acceptance update
+
+The user reported completing the device test and merged PR #24 on 2026-10-01. Issue #6 is closed. Exact browser/device versions and exported physical diagnostics were not supplied in the conversation, so this is user-reported acceptance rather than additional numeric measurements. This unblocks #7; historical synthetic observations below remain applicable.
+
 ## Decision
 
 **Limited GO for the production AudioClient design.** Rust/WASM initializes inside a real AudioWorklet, processes a known gain operation, and runs continuously with Chromium synthetic microphone capture. Fixed memory and buffers are viable for this narrow operation. Physical audible stability and Safari/mobile compatibility still require manual evidence; this is not certification of a future loop engine.
@@ -59,4 +63,4 @@ Use desktop Chrome with wired headphones first. For phones use an HTTPS origin, 
 - [ ] Run the 30-second offline probe; sample values should all be 0.25, memory should remain unchanged, failures should be zero.
 - [ ] Download diagnostics while running; record OS/device, exact browser version, microphone/output hardware and any failure steps.
 
-Desktop physical audio: pending. Safari/macOS, Chrome/Android and Safari/iOS: not run, hardware unavailable. Keep #6 open until normal-load physical audio observations are added. Proceed to #7 after this gate is reviewed; do not promote this page into the production AudioClient.
+Desktop physical audio: pending. Safari/macOS, Chrome/Android and Safari/iOS: not run, hardware unavailable. The original manual gate was accepted by the user as recorded above. Proceed to #7; do not promote this page into the production AudioClient.

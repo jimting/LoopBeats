@@ -42,3 +42,38 @@ h1 {
 .notice h2 {
   margin-top: 0;
 }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+button {
+  font: inherit;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #91e6c3;
+  background: #91e6c3;
+  color: #10151e;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:focus-visible {
+  outline: 3px solid white;
+  outline-offset: 3px;
+}
+.diagnostics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.diagnostics dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+[role='alert'] {
+  color: #ffd39b;
+}
