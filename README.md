@@ -30,9 +30,62 @@ Priorities: exact loop timing, stable audio, low perceived latency, cross-device
 
 A runnable React/TypeScript/Vite shell and development quality gates are configured. Audio recording and playback are not implemented yet. The Rust crate is still an empty portable boundary; its native and WASM builds verify tooling, not loop behavior.
 
+## Environment setup
+
+| Tool            | Requirement                                                           | Install                                                                          |
+| --------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Node.js and npm | Node 24 is the tested development/CI version; npm comes with Node     | [Official Node.js downloads](https://nodejs.org/en/download) — select version 24 |
+| Rust and Cargo  | Install through rustup; required for Rust/WASM builds and Rust checks | [Official Rust installer](https://rust-lang.org/tools/install/)                  |
+| Git             | Required to clone/update this repository                              | Verify with `git --version`                                                      |
+
+### Windows (PowerShell)
+
+1. Install Node 24 using the Windows installer. If you already use a Node version manager, select Node 24 through that manager instead.
+2. Download and run `rustup-init.exe` from the Rust installation page. Accept the default MSVC toolchain. Install the Visual Studio C++ build tools if prompted; select **Desktop development with C++** with its MSVC tools and Windows SDK. See [Microsoft's Windows Rust setup guide](https://learn.microsoft.com/en-us/windows/dev-environment/rust/setup).
+3. Close and reopen PowerShell after installation. If using an integrated terminal, restart VS Code as well so it receives the updated PATH.
+4. Verify the tools before starting the application:
+
+```powershell
+node --version       # Expected: v24.x
+npm --version
+cargo --version
+rustup --version
+git --version
+```
+
+Clone the repository if you do not already have it:
+
+```powershell
+git clone https://github.com/ty-jt-agent/LoopBeats.git
+cd LoopBeats
+```
+
+In an existing clone, open PowerShell in its root directory. Run `rustup show` there: `rust-toolchain.toml` selects Rust 1.98.1, rustfmt, clippy and the `wasm32-unknown-unknown` target. Rustup downloads the selected toolchain/target on first use; allow that download to finish.
+
+### macOS / Linux
+
+Install Node 24 and Rust using the official links above. After rustup installation, open a new terminal or run `source "$HOME/.cargo/env"` to load Cargo into PATH. Verify `node --version`, `npm --version`, `cargo --version` and `rustup --version`, then clone/open the repository and run `rustup show` from its root.
+
+### Troubleshooting: `spawnSync cargo ENOENT`
+
+This means the build script cannot find Cargo. Cargo is installed by rustup, not by `npm ci`. First run `Get-Command cargo` in PowerShell. If Cargo is missing, check whether the executable exists:
+
+```powershell
+Test-Path "$env:USERPROFILE\.cargo\bin\cargo.exe"
+```
+
+If this returns `False`, install Rust using the steps above. If it returns `True`, reopen your terminal/editor or add the default Rust directory for the current PowerShell session:
+
+```powershell
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+cargo --version
+```
+
+For a permanent fix, add `%USERPROFILE%\.cargo\bin` to your Windows user PATH and restart the terminal/editor. If you chose a custom Cargo installation directory, use that directory instead. A Node 22 installation is a separate environment mismatch: select Node 24 and reopen the terminal before running `npm ci` again.
+
 ## Run locally
 
-Install Node 24+, npm and Rust via rustup, then:
+After verifying the environment, run from the repository root:
 
 ```bash
 npm ci
