@@ -28,15 +28,15 @@ Priorities: exact loop timing, stable audio, low perceived latency, cross-device
 
 ## Current state
 
-A runnable React/TypeScript/Vite shell and development quality gates are configured. Audio recording and playback are not implemented yet. The Rust crate is still an empty portable boundary; its native and WASM builds verify tooling, not loop behavior.
+The application starts a microphone/audio-interface session through AudioClient, AudioWorklet and the Rust/WASM engine. Monitoring defaults off and is explicitly controlled. Status, input/output levels and actionable startup errors are visible. Recording and loop playback belong to later tickets. The isolated #5/#6 experiment pages remain available for research.
 
 ## Environment setup
 
-| Tool            | Requirement                                                           | Install                                                                          |
-| --------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Node.js and npm | Node 24 is the tested development/CI version; npm comes with Node     | [Official Node.js downloads](https://nodejs.org/en/download) — select version 24 |
-| Rust and Cargo  | Install through rustup; required for Rust/WASM builds and Rust checks | [Official Rust installer](https://rust-lang.org/tools/install/)                  |
-| Git             | Required to clone/update this repository                              | Verify with `git --version`                                                      |
+| Tool            | Requirement                                                                          | Install                                                                          |
+| --------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Node.js and npm | Node 24 is the tested development/CI version; npm comes with Node                    | [Official Node.js downloads](https://nodejs.org/en/download) — select version 24 |
+| Rust and Cargo  | Install through rustup; required for application startup/build, WASM and Rust checks | [Official Rust installer](https://rust-lang.org/tools/install/)                  |
+| Git             | Required to clone/update this repository                                             | Verify with `git --version`                                                      |
 
 ### Windows (PowerShell)
 
@@ -92,7 +92,7 @@ npm ci
 npm run dev
 ```
 
-Open the local URL printed by Vite (normally http://localhost:5173). For a production preview, run `npm run build`, then `npm run preview`.
+The dev command builds the real audio assets first, so Cargo must be on PATH. Open the local URL printed by Vite (normally http://localhost:5173). Click **Start audio** and allow microphone access. Use wired headphones, then explicitly **Enable monitoring** to hear live input. **Stop audio** releases the microphone; the next session starts with monitoring off. A connected audio interface can be selected as the browser/OS default input; in-app device selection comes later. For a production preview, run `npm run build`, then `npm run preview`.
 
 Run `npm run check` for scaffold, type, lint, formatting and TypeScript unit checks. See [development instructions](docs/development.md) for browser, Rust/WASM and CI commands.
 

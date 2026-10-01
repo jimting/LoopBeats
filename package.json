@@ -12,9 +12,9 @@
   ],
   "scripts": {
     "check:scaffold": "node scripts/check-scaffold.mjs",
-    "dev": "npm run dev --workspace @loopbeats/web --",
+    "dev": "npm run build:audio && npm run dev --workspace @loopbeats/web --",
     "preview": "npm run preview --workspace @loopbeats/web --",
-    "build": "npm run typecheck && npm run build --workspace @loopbeats/web",
+    "build": "npm run build:audio && npm run typecheck && npm run build --workspace @loopbeats/web",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
@@ -26,7 +26,8 @@
     "spike:audio": "npm run dev -- --open /browser-audio-spike/index.html",
     "spike:probe": "node scripts/browser-audio-probe.cjs",
     "spike:wasm:build": "node scripts/build-wasm-spike.mjs",
-    "spike:wasm": "npm run spike:wasm:build && npm run dev -- --open /wasm-audio-spike/index.html"
+    "spike:wasm": "npm run spike:wasm:build && npm run dev -- --open /wasm-audio-spike/index.html",
+    "build:audio": "node scripts/build-audio.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
