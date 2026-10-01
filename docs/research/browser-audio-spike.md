@@ -2,7 +2,11 @@
 
 Issue: [#5](https://github.com/ty-jt-agent/LoopBeats/issues/5).
 Observed: 2026-10-01 (Asia/Taipei).
-Status: synthetic desktop pipeline verified; physical-device acceptance pending.
+Status: accepted by user after manual testing and merge of PR #23 on 2026-10-01.
+
+## Manual acceptance update
+
+The user reported that testing was completed, checked all device-test items in [PR #23](https://github.com/ty-jt-agent/LoopBeats/pull/23), merged it, and closed #5. The checklist covers permission allow/deny, input signal, monitoring for at least 60 seconds, monitoring disable, stop/restart and diagnostics export. Exact device/browser versions and diagnostic values were not provided in this conversation, so no additional measurements or cross-device claims are inferred. The historical synthetic observations below remain unchanged. This unblocks the #6 experiment.
 
 ## Question and decision
 
@@ -14,7 +18,7 @@ Can microphone capture pass through AudioWorklet to browser output, with monitor
 
 ## Primary experiment
 
-The disposable source is captured on [spike/5-browser-audio](https://github.com/ty-jt-agent/LoopBeats/tree/spike/5-browser-audio), pinned to [cca122f042be81b8e4f61163c528b0e872dcaede](https://github.com/ty-jt-agent/LoopBeats/tree/cca122f042be81b8e4f61163c528b0e872dcaede). It must stay out of main's production application. The branch contains the page, worklet, observational runner and raw observations.
+The disposable source is captured on [spike/5-browser-audio](https://github.com/ty-jt-agent/LoopBeats/tree/spike/5-browser-audio), pinned to [cca122f042be81b8e4f61163c528b0e872dcaede](https://github.com/ty-jt-agent/LoopBeats/tree/cca122f042be81b8e4f61163c528b0e872dcaede). The user requested the experimental code for device testing and merged it via PR #23. It remains an isolated public experiment, separate from the production application. The branch contains the page, worklet, observational runner and raw observations.
 
 To reproduce:
 
@@ -69,7 +73,7 @@ A file-backed generated WAV capture attempt returned NotSupportedError. The succ
 
 | Target | Status | Required observation |
 | --- | --- | --- |
-| Desktop Chrome + wired headset | Pending: physical input/output unavailable | Permission allow/deny, spoken input, audible monitoring, Stop/restart, reported settings |
+| Desktop Chrome + wired headset | User reports checklist passed; exact device unspecified | Permission allow/deny, spoken input, audible monitoring, Stop/restart, reported settings |
 | Desktop Chrome + USB interface | Pending: hardware unavailable | Routing, monitoring, reconnect and perceived delay |
 | macOS Safari | Not run: platform unavailable | User activation, capture, worklet output and recovery |
 | Android Chrome | Not run: device unavailable | Touch startup, wired output, tab/background/lock behavior |
@@ -90,4 +94,4 @@ Phones must access a secure origin: ordinary HTTP over a desktop LAN address is 
 
 ## Acceptance assessment
 
-The graph, explicit monitoring and observable diagnostics are demonstrated synthetically. Available failures are recorded, and unavailable Safari/mobile/device probes are explicit. The evidence permits a limited next experiment, but physical desktop permission/audio acceptance is still open. This report deliberately does not close #5 or assert that its full acceptance has been met.
+The graph, explicit monitoring and observable diagnostics are demonstrated synthetically. Available failures are recorded, and unavailable Safari/mobile/device probes are explicit. The original synthetic evidence permitted a limited next experiment. The subsequent user-reported manual checklist and closure of #5 establish acceptance for proceeding to #6; unavailable Safari/mobile probes remain explicit.

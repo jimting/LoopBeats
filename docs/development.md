@@ -25,21 +25,23 @@ Run from the repository root:
 | `npm test` | Vitest tests through observable UI boundaries |
 | `npm run check` | All five checks above |
 | `npm run build` | Typecheck and production web build |
-| `npm run test:browser` | Build and Playwright Chromium startup against production preview |
+| `npm run test:browser` | Build spike WASM and web; Playwright startup and WASM/worklet checks (requires Cargo on PATH) |
 | `cargo fmt --all -- --check` | Rust formatting |
 | `cargo clippy --locked --workspace --all-targets -- -D warnings` | Rust linting |
 | `cargo test --locked --workspace` | Rust tests |
-| `npm run build:wasm` | Release WASM artifact for portable Rust crate |
+| `npm run build:wasm` | Release WASM artifact for portable loop engine |
+| `npm run spike:wasm:build` | Build experimental gain WASM and copy to the public spike route |
+| `npm run spike:wasm` | Build and open the isolated WASM microphone experiment |
 
 Use `npm run format` and `cargo fmt --all` to format. Existing domain/design documents and vendored skills are excluded from Prettier to preserve their text; review documentation edits directly.
 
 Playwright starts its own preview server at 127.0.0.1:4173 and refuses an occupied port. Chromium must be installed; Linux libraries can be installed by the --with-deps command. Failure traces are retained under test-results.
 
-The WASM artifact is target/wasm32-unknown-unknown/release/loop_engine.wasm. This ticket verifies compilation only: no JS bindings, AudioWorklet integration or engine behavior exist yet. Cargo runs zero behavioral tests; add meaningful sample-level tests as engine functionality begins.
+The WASM artifact is target/wasm32-unknown-unknown/release/loop_engine.wasm. The production loop engine still has no behavior. The separate wasm-gain-spike crate has one known-output gain test and an actual AudioWorklet/WASM bridge with browser integration tests. Its generated artifact is copied to apps/web/public/wasm-audio-spike/gain.wasm (git-ignored). Build it with npm run spike:wasm:build before a production web build if serving that experiment. See docs/research/wasm-audio-spike.md for limits and physical-device checks.
 
 ## CI
 
-GitHub Actions runs on pull requests and main pushes. The web job runs Node 24, npm ci, all web checks, browser installation and the production smoke test. The Rust job uses the committed toolchain, fmt, clippy, tests and release WASM build. Errors fail jobs; browser failure artifacts are uploaded.
+GitHub Actions runs on pull requests and main pushes. The web job runs Node 24, npm ci, all web checks, browser installation, the committed Rust toolchain, and production browser tests including the compiled WASM spike. Browser verification therefore also requires Rust. The Rust job uses the committed toolchain, fmt, clippy, tests and release WASM build. Errors fail jobs; browser failure artifacts are uploaded.
 
 Repository administrators can require both jobs in branch protection; adding a workflow does not configure repository rules.
 

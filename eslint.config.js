@@ -28,6 +28,8 @@ export default tseslint.config(
   {
     files: ['scripts/**/*.mjs', 'eslint.config.js'],
     extends: [js.configs.recommended],
-    languageOptions: { globals: { console: 'readonly', URL: 'readonly' } },
+    languageOptions: {
+      globals: { console: 'readonly', URL: 'readonly', process: 'readonly' },
+    },
   },
 );

@@ -20,11 +20,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:browser": "npm run build && playwright test",
+    "test:browser": "npm run spike:wasm:build && npm run build && playwright test",
     "build:wasm": "cargo build --locked --release --target wasm32-unknown-unknown -p loop-engine",
     "check": "npm run check:scaffold && npm run typecheck && npm run lint && npm run format:check && npm test",
     "spike:audio": "npm run dev -- --open /browser-audio-spike/index.html",
-    "spike:probe": "node scripts/browser-audio-probe.cjs"
+    "spike:probe": "node scripts/browser-audio-probe.cjs",
+    "spike:wasm:build": "node scripts/build-wasm-spike.mjs",
+    "spike:wasm": "npm run spike:wasm:build && npm run dev -- --open /wasm-audio-spike/index.html"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -7,3 +7,4 @@ test-results/
 .env
 .env.*
 !.env.example
+apps/web/public/wasm-audio-spike/gain.wasm

@@ -44,3 +44,16 @@ Open the local URL printed by Vite (normally http://localhost:5173). For a produ
 Run `npm run check` for scaffold, type, lint, formatting and TypeScript unit checks. See [development instructions](docs/development.md) for browser, Rust/WASM and CI commands.
 
 Vendored Matt Pocock skills are MIT licensed, pinned and attributed in `.agents/skills/UPSTREAM.md`. `/to-issues` is local compatibility naming, not an upstream skill.
+
+## Rust/WASM audio experiment (#6)
+
+This isolated feasibility page is separate from the production application. Install Node 24 and Rust via rustup (the repository toolchain installs its WASM target), then run:
+
+```bash
+npm ci
+npm run spike:wasm
+```
+
+Open `/wasm-audio-spike/index.html` on the printed localhost URL. Use wired headphones, Start microphone, then Enable monitoring. The worklet applies a fixed 0.5 gain before monitoring gain. Run the offline probe and Download diagnostics while running. See [the findings and manual checklist](docs/research/wasm-audio-spike.md).
+
+`npm run test:browser` now builds the WASM spike first and requires Cargo on PATH. The generated `gain.wasm` is ignored by git; `npm run spike:wasm:build` regenerates it before serving or building the experiment. Ordinary web development and the application shell remain independent of this page.
