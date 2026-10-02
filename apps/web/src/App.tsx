@@ -79,7 +79,36 @@ export function App() {
             </dd>
           </dl>
         )}
-        <p>Audio recording and playback are coming next.</p>
+        <section aria-labelledby="track-heading">
+          <h2 id="track-heading">Track 1 · Loop</h2>
+          <p data-testid="track-state">{snapshot.track.state}</p>
+          <button
+            disabled={!ready || snapshot.track.state === 'Playing'}
+            onClick={() => client.record()}
+          >
+            REC
+          </button>
+          <p>
+            {snapshot.track.state === 'Recording'
+              ? 'Press REC again to finish and loop.'
+              : 'Press REC on an empty track to record.'}
+          </p>
+          <p>
+            Captured samples:{' '}
+            <span data-testid="loop-length">
+              {snapshot.track.lengthSamples}
+            </span>
+          </p>
+          <progress
+            aria-label="Loop progress"
+            max={snapshot.track.lengthSamples || 1}
+            value={snapshot.track.positionSamples}
+          />
+          <p>
+            Stop audio ends this session and discards its recording. Track STOP,
+            PLAY and CLEAR follow in later tickets.
+          </p>
+        </section>
       </section>
     </main>
   );

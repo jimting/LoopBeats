@@ -1,3 +1,7 @@
+// Numeric states match Rust TrackState's repr(u32) ABI.
+const TRACK_STATE = { Empty: 0, Recording: 1, Playing: 2 };
+const TRACK_STATE_NAMES = Object.keys(TRACK_STATE);
+
 // Real-time callback uses fixed views and counters. Messages allocate outside process().
 class LoopProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -5,6 +9,8 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.engine = new WebAssembly.Instance(
       options.processorOptions.module,
     ).exports;
+    if (this.engine.initialize(sampleRate) !== 1)
+      throw new Error('Unsupported audio sample rate');
     this.input = new Float32Array(
       this.engine.memory.buffer,
       this.engine.input_ptr(),
@@ -23,11 +29,17 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.port.onmessage = ({ data }) => {
       if (data.type === 'monitoring' && !this.failed)
         this.engine.set_monitoring(data.enabled ? 1 : 0);
+      if (data.type === 'record' && !this.failed) this.engine.record();
       this.port.postMessage({
         type: 'snapshot',
         failed: this.failed,
         monitoring: Boolean(this.engine.monitoring()),
         processedFrames: this.frames,
+        track: {
+          state: TRACK_STATE_NAMES[this.engine.track_state()],
+          lengthSamples: this.engine.loop_length(),
+          positionSamples: this.engine.loop_position(),
+        },
         inputLevel: this.inputLevel,
         outputLevel: this.outputLevel,
       });
@@ -59,9 +71,11 @@ class LoopProcessor extends AudioWorkletProcessor {
     }
     // Slowly decaying meters; silent output resets immediately when monitoring is off.
     this.inputLevel = Math.max(inputPeak, this.inputLevel * 0.999);
-    this.outputLevel = this.engine.monitoring()
-      ? Math.max(outputPeak, this.outputLevel * 0.999)
-      : 0;
+    this.outputLevel =
+      this.engine.monitoring() ||
+      this.engine.track_state() === TRACK_STATE.Playing
+        ? Math.max(outputPeak, this.outputLevel * 0.999)
+        : 0;
     this.frames += count;
     return true;
   }

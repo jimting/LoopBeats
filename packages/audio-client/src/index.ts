@@ -1,4 +1,8 @@
-import type { AudioCommand, AudioSnapshot } from '@loopbeats/domain';
+import type {
+  AudioCommand,
+  AudioSnapshot,
+  TrackSnapshot,
+} from '@loopbeats/domain';
 export type { AudioSnapshot } from '@loopbeats/domain';
 
 type Session = {
@@ -10,6 +14,7 @@ type Session = {
 };
 type WorkletSnapshot = {
   type: 'snapshot';
+  track: TrackSnapshot;
   failed: boolean;
   monitoring: boolean;
   processedFrames: number;
@@ -18,6 +23,7 @@ type WorkletSnapshot = {
 };
 const idle = (): AudioSnapshot => ({
   status: 'idle',
+  track: { state: 'Empty', lengthSamples: 0, positionSamples: 0 },
   monitoring: false,
   error: null,
   sampleRate: null,
@@ -168,6 +174,7 @@ export class AudioClient {
               processedFrames: data.processedFrames,
               inputLevel: data.inputLevel,
               outputLevel: data.outputLevel,
+              track: data.track,
             });
             finish();
           }
@@ -212,6 +219,12 @@ export class AudioClient {
       this.session?.node?.port.postMessage({
         type: 'monitoring',
         enabled,
+      } satisfies AudioCommand);
+  }
+  record(): void {
+    if (this.snapshot.status === 'ready')
+      this.session?.node?.port.postMessage({
+        type: 'record',
       } satisfies AudioCommand);
   }
   async stop(): Promise<void> {
