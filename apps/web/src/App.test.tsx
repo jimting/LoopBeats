@@ -7,10 +7,6 @@ test('opens a clearly identified loopstation shell without claiming audio is rea
   expect(
     screen.getByRole('heading', { name: 'LoopBeats', level: 1 }),
   ).toBeVisible();
-  expect(
-    screen.getByText('Audio recording and playback are coming next.'),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole('button', { name: /record|play/i }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByTestId('track-state')).toHaveTextContent('Empty');
+  expect(screen.getByRole('button', { name: 'REC' })).toBeDisabled();
 });

@@ -10,7 +10,7 @@ npx playwright install --with-deps chromium
 npm run dev
 ```
 
-Vite prints the development URL (normally http://localhost:5173). The application starts actual Rust/WASM audio processing with explicit monitoring, status and retry controls. Recording/loop behavior belongs to later tickets. Development startup and production builds require Cargo and generate the audio assets automatically. For production preview run `npm run build`, then `npm run preview`.
+Vite prints the development URL (normally http://localhost:5173). The application starts actual Rust/WASM audio processing with explicit monitoring, status and retry controls. Track 1 supports mono recording with REC and continuous Loop playback with REC again; track controls, transport operations, extra tracks and overdub follow later. Stop audio discards the temporary recording. Development startup and production builds require Cargo and generate the audio assets automatically. For production preview run `npm run build`, then `npm run preview`.
 
 ## Verification commands
 
@@ -38,11 +38,11 @@ Use `npm run format` and `cargo fmt --all` to format. Existing domain/design doc
 
 Playwright starts its own preview server at 127.0.0.1:4173 and refuses an occupied port. Chromium must be installed; Linux libraries can be installed by the --with-deps command. Failure traces are retained under test-results.
 
-The WASM artifact is target/wasm32-unknown-unknown/release/loop_engine.wasm. The production engine now owns live-input monitoring; loop recording/playback remain unimplemented. Its native tests cover monitoring and its browser integration crosses the actual WASM/worklet bridge. The separate wasm-gain-spike crate has one known-output gain test and an actual AudioWorklet/WASM bridge with browser integration tests. Its generated artifact is copied to apps/web/public/wasm-audio-spike/gain.wasm (git-ignored). Build it with npm run spike:wasm:build before a production web build if serving that experiment. See docs/research/wasm-audio-spike.md for limits and physical-device checks.
+The WASM artifact is target/wasm32-unknown-unknown/release/loop_engine.wasm. The production engine owns live-input monitoring and first Loop capture/playback. Native tests verify exact sample replay, wraparound, capture bounds, monitoring and output protection; browser integration crosses the actual WASM/worklet bridge and verifies both output channels. The separate wasm-gain-spike crate has one known-output gain test and an actual AudioWorklet/WASM bridge with browser integration tests. Its generated artifact is copied to apps/web/public/wasm-audio-spike/gain.wasm (git-ignored). Build it with npm run spike:wasm:build before a production web build if serving that experiment. See docs/research/wasm-audio-spike.md for limits and physical-device checks.
 
 ## CI
 
-GitHub Actions runs on pull requests and main pushes. The web job runs Node 24, npm ci, all web checks, browser installation, the committed Rust toolchain, and production browser tests including production audio startup/monitoring and the compiled WASM spike. Browser verification therefore also requires Rust. The Rust job uses the committed toolchain, fmt, clippy, tests and release WASM build. Errors fail jobs; browser failure artifacts are uploaded.
+GitHub Actions runs on pull requests and main pushes. The web job runs Node 24, npm ci, all web checks, browser installation, the committed Rust toolchain, and production browser tests including production audio startup/monitoring, first Loop recording/playback, known-sample stereo output and the compiled WASM spike. Browser verification therefore also requires Rust. The Rust job uses the committed toolchain, fmt, clippy, tests and release WASM build. Errors fail jobs; browser failure artifacts are uploaded.
 
 Repository administrators can require both jobs in branch protection; adding a workflow does not configure repository rules.
 

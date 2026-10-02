@@ -32,6 +32,7 @@ export default tseslint.config(
       globals: {
         AudioWorkletProcessor: 'readonly',
         registerProcessor: 'readonly',
+        sampleRate: 'readonly',
         WebAssembly: 'readonly',
       },
     },

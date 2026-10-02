@@ -11,7 +11,7 @@ test('the production application opens without runtime errors', async ({
     page.getByRole('heading', { name: 'LoopBeats', level: 1 }),
   ).toBeVisible();
   await expect(
-    page.getByText('Audio recording and playback are coming next.'),
-  ).toBeVisible();
+    page.getByRole('button', { name: 'REC', exact: true }),
+  ).toBeDisabled();
   expect(errors).toEqual([]);
 });
