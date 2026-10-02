@@ -3,6 +3,7 @@ import type {
   AudioSnapshot,
   TrackSnapshot,
   TrackId,
+  PlaybackMode,
   TransportSnapshot,
 } from '@loopbeats/domain';
 export type { AudioSnapshot } from '@loopbeats/domain';
@@ -26,6 +27,8 @@ type WorkletSnapshot = {
 };
 const emptyTrack = (): TrackSnapshot => ({
   state: 'Empty',
+  mode: 'Loop',
+  canSetMode: false,
   lengthSamples: 0,
   positionSamples: 0,
   capacitySamples: 0,
@@ -240,6 +243,9 @@ export class AudioClient {
   private command(command: AudioCommand): void {
     if (this.snapshot.status === 'ready')
       this.session?.node?.port.postMessage(command);
+  }
+  setMode(trackId: TrackId, mode: PlaybackMode): void {
+    this.command({ type: 'set-mode', trackId, mode });
   }
   record(trackId: TrackId): void {
     this.command({ type: 'record', trackId });

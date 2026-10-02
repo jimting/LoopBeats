@@ -1,6 +1,9 @@
+export type PlaybackMode = 'Loop' | 'OneShot';
 export type TrackId = 0 | 1;
 export type AudioStatus = 'idle' | 'starting' | 'ready' | 'stopping' | 'error';
 export interface TrackSnapshot {
+  readonly mode: PlaybackMode;
+  readonly canSetMode: boolean;
   readonly state: 'Empty' | 'Recording' | 'Playing' | 'Stopped' | 'Overdubbing';
   readonly capacitySamples: number;
   readonly captureLimitSamples: number;
@@ -30,6 +33,7 @@ export interface AudioSnapshot {
 export type AudioCommand =
   | { type: 'monitoring'; enabled: boolean }
   | { type: 'snapshot' }
+  | { type: 'set-mode'; trackId: TrackId; mode: PlaybackMode }
   | { type: 'record'; trackId: TrackId }
   | { type: 'play'; trackId: TrackId }
   | { type: 'stop-track'; trackId: TrackId }

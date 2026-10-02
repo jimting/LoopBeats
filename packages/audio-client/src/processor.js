@@ -37,6 +37,16 @@ class LoopProcessor extends AudioWorkletProcessor {
         this.engine.set_monitoring(data.enabled ? 1 : 0);
       if (!this.failed) {
         switch (data.type) {
+          case 'set-mode':
+            if (
+              (data.trackId === 0 || data.trackId === 1) &&
+              (data.mode === 'Loop' || data.mode === 'OneShot')
+            )
+              this.engine.set_mode(
+                data.trackId,
+                data.mode === 'OneShot' ? 1 : 0,
+              );
+            break;
           case 'record':
             if (data.trackId === 0 || data.trackId === 1)
               this.engine.record(data.trackId);
@@ -65,6 +75,8 @@ class LoopProcessor extends AudioWorkletProcessor {
           cycleLengthSamples: this.engine.cycle_length(),
         },
         tracks: [0, 1].map((trackId) => ({
+          mode: this.engine.playback_mode(trackId) === 1 ? 'OneShot' : 'Loop',
+          canSetMode: Boolean(this.engine.can_set_mode(trackId)),
           state: TRACK_STATE_NAMES[this.engine.track_state(trackId)],
           lengthSamples: this.engine.loop_length(trackId),
           capturedSamples: this.engine.captured_samples(trackId),
