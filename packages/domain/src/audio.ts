@@ -44,4 +44,6 @@ export type AudioCommand =
   | { type: 'record'; trackId: TrackId }
   | { type: 'play'; trackId: TrackId }
   | { type: 'stop-track'; trackId: TrackId }
-  | { type: 'stop-transport' };
+  | { type: 'stop-transport' }
+  | { type: 'clear'; trackId: TrackId }
+  | { type: 'reset' };

@@ -211,6 +211,23 @@ impl LoopEngine {
         track.one_shot_position = 0;
         track.state = TrackState::Playing;
     }
+    /// Remove a recording in constant time; fresh capture invalidates old storage lazily.
+    pub fn clear(&mut self, track_id: usize) {
+        if let Some(track) = self.tracks.get_mut(track_id) {
+            track.state = TrackState::Empty;
+            track.length = 0;
+            track.captured = 0;
+            track.one_shot_position = 0;
+        }
+    }
+    /// Start a fresh audio workspace while retaining volume, mute and mode preferences.
+    pub fn reset(&mut self) {
+        for track_id in 0..self.tracks.len() {
+            self.clear(track_id);
+        }
+        self.transport = Transport::default();
+        self.monitoring = false;
+    }
     pub fn stop_transport(&mut self) {
         for track in &mut self.tracks {
             track.one_shot_position = 0;
@@ -585,6 +602,14 @@ mod wasm {
                 .map(|track| track.muted as u32)
                 .unwrap_or_default()
         })
+    }
+    #[no_mangle]
+    pub extern "C" fn clear(track_id: usize) {
+        with_engine(|engine| engine.clear(track_id));
+    }
+    #[no_mangle]
+    pub extern "C" fn reset() {
+        with_engine(|engine| engine.reset());
     }
     #[no_mangle]
     pub extern "C" fn input_ptr() -> *mut f32 {

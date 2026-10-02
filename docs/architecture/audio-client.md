@@ -64,7 +64,7 @@ Verification covers multi-cycle full-volume sums, partial track/global STOP rete
 
 ## Independent One-shot capture and playback (#12)
 
-Each track has an engine-owned playback mode. Empty tracks can select Loop or One-shot through AudioClient.setMode and the worklet; snapshots acknowledge mode and command availability. Retained recording conversion is implemented in #13 and CLEAR belongs to #15. React displays availability and sends commands rather than maintaining another state machine.
+Each track has an engine-owned playback mode. Empty tracks can select Loop or One-shot through AudioClient.setMode and the worklet; snapshots acknowledge mode and command availability. Retained recording conversion is implemented in #13 and CLEAR/reset are implemented in #15. React displays availability and sends commands rather than maintaining another state machine.
 
 One-shot capture writes sequentially from zero regardless of shared cycle length/position. REC completion or the sample-exact 60-second capacity completes the recording and starts playback on the following sample from position zero. Track STOP finishes capture without playback. Global STOP discards unfinished capture while retaining completed recordings and the existing cycle. A zero-sample finish returns Empty and can retry.
 
@@ -89,3 +89,11 @@ Track gain and mute affect only each track's output contribution. Recording/over
 Master gain multiplies the sum of track contributions and live monitoring before the existing hard clamp to [-1, 1]. Track/master gains accept finite linear values from 0 to 1 (defaults 1); mute defaults off. Invalid values and track IDs are ignored. No gain smoothing or transparent limiter is claimed. Controls send commands through AudioClient; slider percentages and mute state reflect acknowledged engine snapshots. Settings persistence belongs to #16.
 
 Four native known-sample fixtures verify mathematical gains, master-before-clamp, unmodified stored audio, mute phase/capture/overdub and One-shot completion. Two production browser cases verify controls and sample-exact stereo output through actual worklet/WASM. Physical cases M07/M09 remain deferred to #19, including perceptual clicks/overload behavior.
+
+## Safe CLEAR and session reset (#15)
+
+CLEAR ends the selected track's playback/capture, drops its length/count/cursor and returns Empty without altering the cycle or other track. It preserves mode, volume and mute preferences. No buffer is cleared or allocated: the next REC starts a new validity generation, preventing stale audio from reappearing. Clearing every track still preserves the shared cycle. Explicit reset clears all tracks and replaces transport with an empty stopped timeline, while preserving mode/volume/mute settings and resetting monitoring off for the fresh workspace.
+
+Confirmation defaults on. A native modal dialog allows audio processing to continue until Confirm; Cancel/Escape sends no engine command. The page setting can disable/re-enable confirmation; persistence is #16. Reset uses the same confirmation preference and names its broader removal explicitly. All accepted commands are executed through the production worklet, and controls reflect engine acknowledgement.
+
+Three native fixtures cover clear during capture/overdub/One-shot, ownership release, retained cycle/settings, stale-free reuse and reset/new length. Three production browser cases cover confirm/cancel/ongoing transport, immediate clear/re-enable/rerecord and exact stereo output retaining another track until reset. Physical M07/M09 remain deferred to #19.

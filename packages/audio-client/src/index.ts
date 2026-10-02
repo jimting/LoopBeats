@@ -250,6 +250,12 @@ export class AudioClient {
     if (this.snapshot.status === 'ready')
       this.session?.node?.port.postMessage(command);
   }
+  clear(trackId: TrackId): void {
+    this.command({ type: 'clear', trackId });
+  }
+  reset(): void {
+    this.command({ type: 'reset' });
+  }
   setTrackGain(trackId: TrackId, gain: number): void {
     this.command({ type: 'set-track-gain', trackId, gain });
   }
