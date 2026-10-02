@@ -94,7 +94,7 @@ npm run dev
 
 The dev command builds the real audio assets first, so Cargo must be on PATH. Open the local URL printed by Vite (normally http://localhost:5173). Click **Start audio** and allow microphone access. Use wired headphones, then explicitly **Enable monitoring** to hear live input. **Stop audio** releases the microphone; the next session starts with monitoring off. A connected audio interface can be selected as the browser/OS default input; in-app device selection comes later. For a production preview, run `npm run build`, then `npm run preview`.
 
-Run `npm run check` for scaffold, type, lint, formatting and TypeScript unit checks. See [development instructions](docs/development.md) for browser, Rust/WASM and CI commands.
+Run `npm run check` for scaffold, type, lint, formatting and TypeScript unit checks. See [development instructions](docs/development.md) for browser, Rust/WASM and CI commands. The [testing strategy](docs/testing/strategy.md) keeps automated checks on every PR and batches routine physical-audio checks in milestone #19 for our single manual tester.
 
 Vendored Matt Pocock skills are MIT licensed, pinned and attributed in `.agents/skills/UPSTREAM.md`. `/to-issues` is local compatibility naming, not an upstream skill.
 

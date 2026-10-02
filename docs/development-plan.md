@@ -6,6 +6,10 @@ Repository planning baseline adapted from the supplied development plan. Issue g
 
 The confirmed design in [first-usable-milestone.md](architecture/first-usable-milestone.md) governs the first usable version. It supersedes the original single-track-first product milestone and later-only sequencing of overdub, shared transport and mixing below: deliver two synchronized tracks, independent One-shot playback, overdubbing, mixing and settings through small slices, then expand to five. Historical phase descriptions below are roadmap context; do not use them to override the confirmed behavior. Foundation tooling and browser/WASM spikes remain prerequisites. See ADR-0001 for shared-cycle alignment.
 
+## Testing workflow update (2026-10-02)
+
+[Testing strategy](testing/strategy.md) supersedes historical per-feature manual-testing gates below. Automated checks and review gate feature merges; routine hardware checks are consolidated in #19. First-version acceptance still requires integrated physical-audio evidence.
+
 ## Product and priorities
 
 Build a browser multi-track loopstation inspired by RC-505. Desktop, tablet and phone users should request microphone or audio-interface input, record loops, overdub, synchronize tracks and mix them. Web-first with a portable Rust engine preserves a later native option.
@@ -92,3 +96,4 @@ After foundation, grill the first milestone: request microphone, capture one loo
 Core success target: URL startup on desktop/mobile target browsers; microphone permission; five synchronized tracks; record/play/overdub/stop/clear/mute/gain; no cumulative software timing drift; continued audio under busy UI; understandable initialization errors. Effects, full session persistence, MIDI, cloud and visual polish are unnecessary for core validation.
 
 Long term, the same Rust engine can run behind Web/WASM, desktop-native and mobile-native audio hosts. Preserve portability without prematurely implementing native apps.
+
