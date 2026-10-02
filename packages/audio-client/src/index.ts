@@ -2,6 +2,7 @@ import type {
   AudioCommand,
   AudioSnapshot,
   TrackSnapshot,
+  TransportSnapshot,
 } from '@loopbeats/domain';
 export type { AudioSnapshot } from '@loopbeats/domain';
 
@@ -14,6 +15,7 @@ type Session = {
 };
 type WorkletSnapshot = {
   type: 'snapshot';
+  transport: TransportSnapshot;
   track: TrackSnapshot;
   failed: boolean;
   monitoring: boolean;
@@ -23,7 +25,16 @@ type WorkletSnapshot = {
 };
 const idle = (): AudioSnapshot => ({
   status: 'idle',
-  track: { state: 'Empty', lengthSamples: 0, positionSamples: 0 },
+  transport: { running: false, positionSamples: 0, cycleLengthSamples: 0 },
+  track: {
+    state: 'Empty',
+    lengthSamples: 0,
+    positionSamples: 0,
+    capacitySamples: 0,
+    canRecord: false,
+    canPlay: false,
+    canStop: false,
+  },
   monitoring: false,
   error: null,
   sampleRate: null,
@@ -175,6 +186,7 @@ export class AudioClient {
               inputLevel: data.inputLevel,
               outputLevel: data.outputLevel,
               track: data.track,
+              transport: data.transport,
             });
             finish();
           }
@@ -221,11 +233,23 @@ export class AudioClient {
         enabled,
       } satisfies AudioCommand);
   }
-  record(): void {
+  private command(
+    type: 'record' | 'play' | 'stop-track' | 'stop-transport',
+  ): void {
     if (this.snapshot.status === 'ready')
-      this.session?.node?.port.postMessage({
-        type: 'record',
-      } satisfies AudioCommand);
+      this.session?.node?.port.postMessage({ type } satisfies AudioCommand);
+  }
+  record(): void {
+    this.command('record');
+  }
+  play(): void {
+    this.command('play');
+  }
+  stopTrack(): void {
+    this.command('stop-track');
+  }
+  stopTransport(): void {
+    this.command('stop-transport');
   }
   async stop(): Promise<void> {
     const attempt = ++this.attempt;

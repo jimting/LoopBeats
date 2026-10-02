@@ -1,5 +1,5 @@
 // Numeric states match Rust TrackState's repr(u32) ABI.
-const TRACK_STATE = { Empty: 0, Recording: 1, Playing: 2 };
+const TRACK_STATE = { Empty: 0, Recording: 1, Playing: 2, Stopped: 3 };
 const TRACK_STATE_NAMES = Object.keys(TRACK_STATE);
 
 // Real-time callback uses fixed views and counters. Messages allocate outside process().
@@ -29,15 +29,39 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.port.onmessage = ({ data }) => {
       if (data.type === 'monitoring' && !this.failed)
         this.engine.set_monitoring(data.enabled ? 1 : 0);
-      if (data.type === 'record' && !this.failed) this.engine.record();
+      if (!this.failed) {
+        switch (data.type) {
+          case 'record':
+            this.engine.record();
+            break;
+          case 'play':
+            this.engine.play();
+            break;
+          case 'stop-track':
+            this.engine.stop_track();
+            break;
+          case 'stop-transport':
+            this.engine.stop_transport();
+            break;
+        }
+      }
       this.port.postMessage({
         type: 'snapshot',
         failed: this.failed,
         monitoring: Boolean(this.engine.monitoring()),
         processedFrames: this.frames,
+        transport: {
+          running: Boolean(this.engine.transport_running()),
+          positionSamples: this.engine.transport_position(),
+          cycleLengthSamples: this.engine.cycle_length(),
+        },
         track: {
           state: TRACK_STATE_NAMES[this.engine.track_state()],
           lengthSamples: this.engine.loop_length(),
+          capacitySamples: this.engine.recording_capacity(),
+          canRecord: Boolean(this.engine.can_record()),
+          canPlay: Boolean(this.engine.can_play()),
+          canStop: Boolean(this.engine.can_stop()),
           positionSamples: this.engine.loop_position(),
         },
         inputLevel: this.inputLevel,
