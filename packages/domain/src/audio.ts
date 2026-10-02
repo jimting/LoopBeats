@@ -1,7 +1,7 @@
 export type TrackId = 0 | 1;
 export type AudioStatus = 'idle' | 'starting' | 'ready' | 'stopping' | 'error';
 export interface TrackSnapshot {
-  readonly state: 'Empty' | 'Recording' | 'Playing' | 'Stopped';
+  readonly state: 'Empty' | 'Recording' | 'Playing' | 'Stopped' | 'Overdubbing';
   readonly capacitySamples: number;
   readonly captureLimitSamples: number;
   readonly capturedSamples: number;

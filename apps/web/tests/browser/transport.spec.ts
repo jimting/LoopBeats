@@ -140,7 +140,7 @@ test('production worklet completes a real 60-second sample capture automatically
   expect(result.after.tracks[0].state).toBe('Playing');
   expect(result.after.tracks[0].lengthSamples).toBe(480000);
   expect(result.after.tracks[0].positionSamples).toBe(256);
-  expect(result.after.tracks[0].canRecord).toBe(false);
+  expect(result.after.tracks[0].canRecord).toBe(true);
   expect(result.after.transport).toEqual({
     running: true,
     positionSamples: 256,

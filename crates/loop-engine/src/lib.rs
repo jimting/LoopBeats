@@ -1,4 +1,6 @@
 //! Browser-independent sample-authoritative recording and playback.
+mod loop_buffer;
+use loop_buffer::LoopBuffer;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum TrackState {
@@ -6,6 +8,7 @@ pub enum TrackState {
     Recording,
     Playing,
     Stopped,
+    Overdubbing,
 }
 #[derive(Clone, Copy, Debug)]
 pub struct TrackSnapshot {
@@ -33,11 +36,10 @@ struct Transport {
     cycle_length: usize,
 }
 struct Track {
-    recording: Box<[f32]>,
+    recording: LoopBuffer,
     state: TrackState,
     length: usize,
     captured: usize,
-    capture_start: usize,
 }
 pub struct LoopEngine {
     monitoring: bool,
@@ -63,11 +65,10 @@ impl LoopEngine {
         Self {
             monitoring: false,
             tracks: std::array::from_fn(|_| Track {
-                recording: vec![0.0; samples].into_boxed_slice(),
+                recording: LoopBuffer::new(samples),
                 state: TrackState::Empty,
                 length: 0,
                 captured: 0,
-                capture_start: 0,
             }),
             transport: Transport::default(),
         }
@@ -83,17 +84,22 @@ impl LoopEngine {
         if track_id >= self.tracks.len() || !self.snapshot().tracks[track_id].can_record {
             return;
         }
-        if self.tracks[track_id].state == TrackState::Recording {
-            self.finish_recording(track_id, true);
-        } else {
-            let phase = self.cycle_position();
-            let track = &mut self.tracks[track_id];
-            track.state = TrackState::Recording;
-            track.length = self.transport.cycle_length;
-            track.captured = 0;
-            track.capture_start = phase;
+        match self.tracks[track_id].state {
+            TrackState::Recording => self.finish_recording(track_id, true),
+            TrackState::Overdubbing => self.tracks[track_id].state = TrackState::Playing,
+            TrackState::Playing | TrackState::Stopped => {
+                self.tracks[track_id].state = TrackState::Overdubbing
+            }
+            TrackState::Empty => {
+                let track = &mut self.tracks[track_id];
+                track.recording.begin_capture();
+                track.state = TrackState::Recording;
+                track.length = self.transport.cycle_length;
+                track.captured = 0;
+            }
         }
     }
+
     fn finish_recording(&mut self, track_id: usize, play: bool) {
         let track = &mut self.tracks[track_id];
         if track.captured == 0 {
@@ -119,7 +125,7 @@ impl LoopEngine {
         };
         match track.state {
             TrackState::Recording => self.finish_recording(track_id, false),
-            TrackState::Playing => track.state = TrackState::Stopped,
+            TrackState::Playing | TrackState::Overdubbing => track.state = TrackState::Stopped,
             TrackState::Empty | TrackState::Stopped => {}
         }
     }
@@ -144,7 +150,7 @@ impl LoopEngine {
                     track.length = 0;
                     track.captured = 0;
                 }
-                TrackState::Playing => track.state = TrackState::Stopped,
+                TrackState::Playing | TrackState::Overdubbing => track.state = TrackState::Stopped,
                 TrackState::Empty | TrackState::Stopped => {}
             }
         }
@@ -162,7 +168,7 @@ impl LoopEngine {
         let capture_active = self
             .tracks
             .iter()
-            .any(|track| track.state == TrackState::Recording);
+            .any(|track| matches!(track.state, TrackState::Recording | TrackState::Overdubbing));
         EngineSnapshot {
             tracks: std::array::from_fn(|index| {
                 let track = &self.tracks[index];
@@ -171,18 +177,24 @@ impl LoopEngine {
                     length_samples: track.length,
                     captured_samples: track.captured,
                     position_samples: self.cycle_position(),
-                    capacity_samples: track.recording.len(),
+                    capacity_samples: track.recording.capacity(),
                     capture_limit_samples: if self.transport.cycle_length == 0 {
-                        track.recording.len()
+                        track.recording.capacity()
                     } else {
                         self.transport.cycle_length
                     },
-                    can_record: track.state == TrackState::Recording
-                        || (track.state == TrackState::Empty
-                            && !capture_active
-                            && (self.transport.cycle_length == 0 || self.transport.running)),
+                    can_record: matches!(
+                        track.state,
+                        TrackState::Recording | TrackState::Overdubbing
+                    ) || (!capture_active
+                        && (self.transport.cycle_length == 0 || self.transport.running)
+                        && (track.state != TrackState::Empty
+                            || track.recording.can_begin_capture())),
                     can_play: track.state == TrackState::Stopped,
-                    can_stop: matches!(track.state, TrackState::Recording | TrackState::Playing),
+                    can_stop: matches!(
+                        track.state,
+                        TrackState::Recording | TrackState::Playing | TrackState::Overdubbing
+                    ),
                 }
             }),
             transport_running: self.transport.running,
@@ -206,13 +218,13 @@ impl LoopEngine {
                         } else {
                             phase
                         };
-                        track.recording[position] = source;
+                        track.recording.write(position, source);
                         track.captured += 1;
                         if self.transport.cycle_length == 0 {
                             track.length = track.captured;
                         }
                         let limit = if self.transport.cycle_length == 0 {
-                            track.recording.len()
+                            track.recording.capacity()
                         } else {
                             self.transport.cycle_length
                         };
@@ -220,12 +232,14 @@ impl LoopEngine {
                             self.finish_recording(track_id, true);
                         }
                     }
-                    TrackState::Playing => {
-                        // Uncaptured positions are logically silent, including after a
-                        // discarded capture. Never clear a whole buffer on the audio thread.
-                        let elapsed = (phase + track.length - track.capture_start) % track.length;
-                        if elapsed < track.captured {
-                            sample += track.recording[phase];
+                    TrackState::Playing | TrackState::Overdubbing => {
+                        let previous = track.recording.read(phase);
+                        if track.state == TrackState::Overdubbing {
+                            let mixed = previous + source;
+                            track.recording.write(phase, mixed);
+                            sample += mixed;
+                        } else {
+                            sample += previous;
                         }
                     }
                 }

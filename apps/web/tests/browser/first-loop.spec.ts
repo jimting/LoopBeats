@@ -28,7 +28,7 @@ test('records and plays a first Loop through the real worklet with monitoring of
   await page.waitForTimeout(500);
   await rec.click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
-  await expect(rec).toBeDisabled();
+  await expect(rec).toBeEnabled();
   await expect(page.getByText('Monitoring off', { exact: true })).toBeVisible();
   await expect(page.getByTestId('output-level')).not.toHaveText('0.000');
   const length = await track.getByTestId('loop-length').textContent();
