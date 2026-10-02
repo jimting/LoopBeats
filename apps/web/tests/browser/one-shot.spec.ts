@@ -49,7 +49,7 @@ test('One-shot controls retrigger, stop globally without a Loop transport, and r
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
   const length = await track.getByTestId('loop-length').textContent();
   await expect(rec).toBeDisabled();
-  await expect(mode).toBeDisabled(); // Retained conversions are #13.
+  await expect(mode).toBeEnabled(); // Completed audio can convert while stopped.
   await play.click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');

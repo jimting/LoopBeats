@@ -64,7 +64,7 @@ Verification covers multi-cycle full-volume sums, partial track/global STOP rete
 
 ## Independent One-shot capture and playback (#12)
 
-Each track has an engine-owned playback mode. Empty tracks can select Loop or One-shot through AudioClient.setMode and the worklet; snapshots acknowledge mode and command availability. Retained recording conversion belongs to #13 and CLEAR to #15. React displays availability and sends commands rather than maintaining another state machine.
+Each track has an engine-owned playback mode. Empty tracks can select Loop or One-shot through AudioClient.setMode and the worklet; snapshots acknowledge mode and command availability. Retained recording conversion is implemented in #13 and CLEAR belongs to #15. React displays availability and sends commands rather than maintaining another state machine.
 
 One-shot capture writes sequentially from zero regardless of shared cycle length/position. REC completion or the sample-exact 60-second capacity completes the recording and starts playback on the following sample from position zero. Track STOP finishes capture without playback. Global STOP discards unfinished capture while retaining completed recordings and the existing cycle. A zero-sample finish returns Empty and can retry.
 
@@ -73,3 +73,11 @@ One-shot playback owns a private sample cursor within the same engine, advances 
 Only one capture/overdub is available across both modes. Completed One-shots reject REC and never overdub; their audio can be retriggered until CLEAR is implemented. The agreed session rule still disables new REC when an established Loop cycle has stopped; Loop PLAY restarts it. No new allocations occur during capture/playback, and existing preallocated storage is reused.
 
 Verification: six native public-interface tests cover independent duration, exact samples/end/retrigger, capture exclusion, retained/discarded STOP outcomes, the 60-second boundary and zero-length retry. Three production browser tests cover visible controls, real WASM/worklet one-pass stereo output at capacity and independent capture longer than a running Loop cycle. Routine physical listening remains deferred to #19 (M06/M09); no device pass or latency guarantee is claimed.
+
+## Safe retained playback-mode changes (#13)
+
+Mode changes preserve stored samples and require Empty or Stopped state. The engine exposes canSetMode and canSetLoop; React disables the selector during capture/playback/overdub and disables Loop selection with a length explanation when retained audio does not exactly match an established shared cycle. Commands are checked again in Rust, so stale UI messages cannot bypass eligibility.
+
+Converting a stopped recording changes neither transport nor cycle. One-shot playback resets its private cursor and starts from zero. Converted Loop PLAY joins the current shared phase; when no cycle exists, PLAY establishes the recording's exact sample length and starts only that track. REC on that converted Loop instead establishes the cycle at zero and immediately begins additive overdub. If two recordings converted before any cycle exists have different lengths, establishing one cycle makes the incompatible retained Loop unavailable for PLAY/REC; it can still convert back to One-shot.
+
+Five native fixtures cover retained samples, active-state rejection, exact compatibility, phase joining, cycle establishment on PLAY/REC and compatibility after another track establishes the cycle. Three production browser cases verify acknowledged selector availability/length explanation and sample-exact retained overdub/One-shot output through actual WASM. Physical M06/M09 remain deferred to #19.

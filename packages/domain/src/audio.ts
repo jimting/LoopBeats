@@ -4,6 +4,7 @@ export type AudioStatus = 'idle' | 'starting' | 'ready' | 'stopping' | 'error';
 export interface TrackSnapshot {
   readonly mode: PlaybackMode;
   readonly canSetMode: boolean;
+  readonly canSetLoop: boolean;
   readonly state: 'Empty' | 'Recording' | 'Playing' | 'Stopped' | 'Overdubbing';
   readonly capacitySamples: number;
   readonly captureLimitSamples: number;

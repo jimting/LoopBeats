@@ -97,8 +97,7 @@ fn track_stop_retains_one_shot_without_establishing_or_starting_transport() {
     let mut output = [0.0; 4];
     engine.process(&[], &mut output);
     assert_eq!(output, [0.25, -0.5, 0.0, 0.0]);
-    engine.set_mode(0, PlaybackMode::Loop); // Retained conversion belongs to #13.
-    assert_eq!(engine.snapshot().tracks[0].mode, PlaybackMode::OneShot);
+    assert!(engine.snapshot().tracks[0].can_set_mode);
 }
 
 #[test]

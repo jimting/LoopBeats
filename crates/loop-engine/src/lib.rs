@@ -20,6 +20,7 @@ pub enum PlaybackMode {
 pub struct TrackSnapshot {
     pub mode: PlaybackMode,
     pub can_set_mode: bool,
+    pub can_set_loop: bool,
     pub state: TrackState,
     pub length_samples: usize,
     pub captured_samples: usize,
@@ -91,13 +92,18 @@ impl LoopEngine {
     pub fn monitoring(&self) -> bool {
         self.monitoring
     }
-    /// Select an empty track's capture mode. Retained conversions belong to #13.
+    /// Select capture mode or convert a stopped recording without changing its samples.
     pub fn set_mode(&mut self, track_id: usize, mode: PlaybackMode) {
-        if let Some(track) = self.tracks.get_mut(track_id) {
-            if track.state == TrackState::Empty {
-                track.mode = mode;
-            }
+        let Some(availability) = self.snapshot().tracks.get(track_id).copied() else {
+            return;
+        };
+        if !availability.can_set_mode || (mode == PlaybackMode::Loop && !availability.can_set_loop)
+        {
+            return;
         }
+        let track = &mut self.tracks[track_id];
+        track.mode = mode;
+        track.one_shot_position = 0;
     }
     /// Invalid track indices and unavailable commands are ignored by the engine.
     pub fn record(&mut self, track_id: usize) {
@@ -108,6 +114,11 @@ impl LoopEngine {
             TrackState::Recording => self.finish_recording(track_id, true),
             TrackState::Overdubbing => self.tracks[track_id].state = TrackState::Playing,
             TrackState::Playing | TrackState::Stopped => {
+                if self.transport.cycle_length == 0 {
+                    self.transport.cycle_length = self.tracks[track_id].length;
+                    self.transport.position = 0;
+                    self.transport.running = true;
+                }
                 self.tracks[track_id].state = TrackState::Overdubbing
             }
             TrackState::Empty => {
@@ -159,15 +170,14 @@ impl LoopEngine {
         }
     }
     pub fn play(&mut self, track_id: usize) {
-        let Some(track) = self.tracks.get_mut(track_id) else {
-            return;
-        };
-        if track.state != TrackState::Stopped
-            && !(track.mode == PlaybackMode::OneShot && track.state == TrackState::Playing)
-        {
+        if track_id >= self.tracks.len() || !self.snapshot().tracks[track_id].can_play {
             return;
         }
+        let track = &mut self.tracks[track_id];
         if track.mode == PlaybackMode::Loop && !self.transport.running {
+            if self.transport.cycle_length == 0 {
+                self.transport.cycle_length = track.length;
+            }
             self.transport.position = 0;
             self.transport.running = true;
         }
@@ -205,9 +215,15 @@ impl LoopEngine {
         EngineSnapshot {
             tracks: std::array::from_fn(|index| {
                 let track = &self.tracks[index];
+                let compatible =
+                    self.transport.cycle_length == 0 || track.length == self.transport.cycle_length;
                 TrackSnapshot {
                     mode: track.mode,
-                    can_set_mode: track.state == TrackState::Empty,
+                    can_set_mode: matches!(track.state, TrackState::Empty | TrackState::Stopped),
+                    can_set_loop: matches!(track.state, TrackState::Empty | TrackState::Stopped)
+                        && (track.state == TrackState::Empty
+                            || self.transport.cycle_length == 0
+                            || track.length == self.transport.cycle_length),
                     state: track.state,
                     length_samples: track.length,
                     captured_samples: track.captured,
@@ -231,8 +247,11 @@ impl LoopEngine {
                         && (self.transport.cycle_length == 0 || self.transport.running)
                         && ((track.state == TrackState::Empty
                             && track.recording.can_begin_capture())
-                            || track.mode == PlaybackMode::Loop)),
-                    can_play: track.state == TrackState::Stopped
+                            || (track.state != TrackState::Empty
+                                && track.mode == PlaybackMode::Loop
+                                && compatible))),
+                    can_play: (track.state == TrackState::Stopped
+                        && (track.mode == PlaybackMode::OneShot || compatible))
                         || (track.mode == PlaybackMode::OneShot
                             && track.state == TrackState::Playing),
                     can_stop: matches!(
@@ -484,6 +503,17 @@ mod wasm {
                 .tracks
                 .get(track_id)
                 .map(|track| track.can_set_mode as u32)
+                .unwrap_or_default()
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn can_set_loop(track_id: usize) -> u32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.can_set_loop as u32)
                 .unwrap_or_default()
         })
     }
