@@ -10,7 +10,7 @@ npx playwright install --with-deps chromium
 npm run dev
 ```
 
-Vite prints the development URL (normally http://localhost:5173). The application starts actual Rust/WASM audio processing with explicit monitoring, status and retry controls. Track 1 supports mono recording with REC and continuous Loop playback with REC again; track controls, transport operations, extra tracks and overdub follow later. Stop audio discards the temporary recording. Development startup and production builds require Cargo and generate the audio assets automatically. For production preview run `npm run build`, then `npm run preview`.
+Vite prints the development URL (normally http://localhost:5173). The application starts actual Rust/WASM audio processing with explicit monitoring, status and retry controls. Track 1 supports mono recording with REC and continuous Loop playback with REC again; Track STOP, PLAY, global STOP, remaining capacity and transport state are available. Extra tracks, CLEAR and overdub follow later. Stop audio discards the temporary recording. Development startup and production builds require Cargo and generate the audio assets automatically. For production preview run `npm run build`, then `npm run preview`.
 
 ## Verification commands
 
