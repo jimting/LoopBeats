@@ -9,9 +9,21 @@ test.use({
   },
 });
 
-test('track STOP retains capture and global STOP resets the timeline without discarding it', async ({
+test('track STOP retains a silent capture and global STOP resets the timeline without discarding it', async ({
   page,
 }) => {
+  // Silent capture is valid audio; control/retention behavior must not depend on
+  // when Chromium's synthetic microphone emits its periodic tone.
+  await page.addInitScript(() => {
+    const original = AudioContext.prototype.createMediaStreamSource;
+    AudioContext.prototype.createMediaStreamSource = function (stream) {
+      const source = original.call(this, stream);
+      const gate = this.createGain();
+      gate.gain.value = 0;
+      source.connect(gate);
+      return gate as unknown as MediaStreamAudioSourceNode;
+    };
+  });
   await page.goto('/');
   const track = page.getByRole('region', {
     name: 'Track 1 · Loop',
@@ -37,7 +49,7 @@ test('track STOP retains capture and global STOP resets the timeline without dis
   await track.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(page.getByTestId('transport-state')).toHaveText('Running');
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
-  await expect(page.getByTestId('output-level')).not.toHaveText('0.000');
+  await expect(page.getByTestId('output-level')).toHaveText('0.000');
   await track.getByRole('button', { name: 'Track STOP', exact: true }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
   await expect(page.getByTestId('transport-state')).toHaveText('Running');
@@ -55,7 +67,7 @@ test('track STOP retains capture and global STOP resets the timeline without dis
   ).toBeDisabled();
   await track.getByRole('button', { name: 'PLAY', exact: true }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
-  await expect(page.getByTestId('output-level')).not.toHaveText('0.000');
+  await expect(page.getByTestId('output-level')).toHaveText('0.000');
 });
 
 test('global STOP discards unfinished first capture and permits a new recording', async ({
