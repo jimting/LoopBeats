@@ -1,8 +1,16 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
 
+type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
+
 export function App() {
+  const [confirmClearing, setConfirmClearing] = useState(true);
+  const [pendingRemoval, setPendingRemoval] = useState<Removal | null>(null);
+  const confirmation = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (pendingRemoval) confirmation.current?.showModal();
+  }, [pendingRemoval]);
   const [client] = useState(
     () =>
       new AudioClient({
@@ -21,6 +29,15 @@ export function App() {
       release();
     };
   }, [client]);
+  const remove = (target: Removal) => {
+    if (target.kind === 'track') client.clear(target.trackId);
+    else client.reset();
+    setPendingRemoval(null);
+  };
+  const requestRemoval = (target: Removal) => {
+    if (confirmClearing) setPendingRemoval(target);
+    else remove(target);
+  };
   const ready = snapshot.status === 'ready';
   const starting = snapshot.status === 'starting';
   const status = {
@@ -81,6 +98,17 @@ export function App() {
           </dl>
         )}
         <label>
+          <input
+            type="checkbox"
+            checked={confirmClearing}
+            onChange={(event) =>
+              setConfirmClearing(event.currentTarget.checked)
+            }
+          />
+          Confirm before clearing
+        </label>
+        <p>This confirmation preference applies until you reload the page.</p>
+        <label>
           Master volume
           <input
             type="range"
@@ -112,6 +140,16 @@ export function App() {
             onClick={() => client.stopTransport()}
           >
             Global STOP
+          </button>
+          <button
+            disabled={
+              !ready ||
+              (!snapshot.transport.cycleLengthSamples &&
+                snapshot.tracks.every((track) => track.state === 'Empty'))
+            }
+            onClick={() => requestRemoval({ kind: 'session' })}
+          >
+            Reset session
           </button>
           <p>
             Timeline samples:{' '}
@@ -213,6 +251,12 @@ export function App() {
               >
                 Track STOP
               </button>
+              <button
+                disabled={!ready || track.state === 'Empty'}
+                onClick={() => requestRemoval({ kind: 'track', trackId })}
+              >
+                CLEAR
+              </button>
               <p>
                 {track.state === 'Overdubbing'
                   ? 'REC ends overdub and keeps playing; Track STOP retains additions.'
@@ -263,12 +307,36 @@ export function App() {
               <p>
                 Stop audio closes the session and discards its recordings. Track
                 STOP retains audio. Change playback mode while stopped; Loop
-                requires matching the shared cycle length. CLEAR follows later.
+                requires matching the shared cycle length. CLEAR preserves the
+                cycle; Reset session removes it.
               </p>
             </section>
           );
         })}
       </section>
+      {pendingRemoval && (
+        <dialog
+          ref={confirmation}
+          aria-labelledby="removal-heading"
+          onCancel={() => setPendingRemoval(null)}
+        >
+          <h2 id="removal-heading">
+            {pendingRemoval.kind === 'track'
+              ? `Clear Track ${pendingRemoval.trackId + 1}?`
+              : 'Reset session?'}
+          </h2>
+          <p>
+            {pendingRemoval.kind === 'track'
+              ? 'Remove this recording. The shared cycle and other track remain.'
+              : 'Remove all recordings and reset the shared cycle. Monitoring returns off.'}{' '}
+            Audio continues until you confirm.
+          </p>
+          <button onClick={() => setPendingRemoval(null)}>Cancel</button>
+          <button disabled={!ready} onClick={() => remove(pendingRemoval)}>
+            Confirm
+          </button>
+        </dialog>
+      )}
     </main>
   );
 }
