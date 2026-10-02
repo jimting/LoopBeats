@@ -1,7 +1,10 @@
+export type TrackId = 0 | 1;
 export type AudioStatus = 'idle' | 'starting' | 'ready' | 'stopping' | 'error';
 export interface TrackSnapshot {
   readonly state: 'Empty' | 'Recording' | 'Playing' | 'Stopped';
   readonly capacitySamples: number;
+  readonly captureLimitSamples: number;
+  readonly capturedSamples: number;
   readonly canRecord: boolean;
   readonly canPlay: boolean;
   readonly canStop: boolean;
@@ -15,7 +18,7 @@ export interface TransportSnapshot {
 }
 export interface AudioSnapshot {
   readonly transport: TransportSnapshot;
-  readonly track: TrackSnapshot;
+  readonly tracks: readonly [TrackSnapshot, TrackSnapshot];
   readonly status: AudioStatus;
   readonly monitoring: boolean;
   readonly error: string | null;
@@ -27,7 +30,7 @@ export interface AudioSnapshot {
 export type AudioCommand =
   | { type: 'monitoring'; enabled: boolean }
   | { type: 'snapshot' }
-  | { type: 'record' }
-  | { type: 'play' }
-  | { type: 'stop-track' }
+  | { type: 'record'; trackId: TrackId }
+  | { type: 'play'; trackId: TrackId }
+  | { type: 'stop-track'; trackId: TrackId }
   | { type: 'stop-transport' };
