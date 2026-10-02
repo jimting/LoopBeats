@@ -67,3 +67,7 @@ _Avoid_: Stopped, paused.
 **Quantization**: Scheduling an operation at an appropriate musical boundary; a later feature.
 
 **Armed**: Waiting for a scheduled boundary before an operation starts; later scheduling vocabulary.
+
+**Track gain**: A linear playback multiplier for one track, independent of captured audio and mute.
+
+**Master gain**: A linear multiplier on the summed track and monitoring output before clipping protection.

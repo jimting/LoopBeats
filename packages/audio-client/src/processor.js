@@ -37,6 +37,24 @@ class LoopProcessor extends AudioWorkletProcessor {
         this.engine.set_monitoring(data.enabled ? 1 : 0);
       if (!this.failed) {
         switch (data.type) {
+          case 'set-track-gain':
+            if (
+              (data.trackId === 0 || data.trackId === 1) &&
+              Number.isFinite(data.gain)
+            )
+              this.engine.set_track_gain(data.trackId, data.gain);
+            break;
+          case 'set-track-mute':
+            if (
+              (data.trackId === 0 || data.trackId === 1) &&
+              typeof data.muted === 'boolean'
+            )
+              this.engine.set_track_mute(data.trackId, data.muted ? 1 : 0);
+            break;
+          case 'set-master-gain':
+            if (Number.isFinite(data.gain))
+              this.engine.set_master_gain(data.gain);
+            break;
           case 'set-mode':
             if (
               (data.trackId === 0 || data.trackId === 1) &&
@@ -66,6 +84,7 @@ class LoopProcessor extends AudioWorkletProcessor {
       }
       this.port.postMessage({
         type: 'snapshot',
+        masterGain: this.engine.master_gain(),
         failed: this.failed,
         monitoring: Boolean(this.engine.monitoring()),
         processedFrames: this.frames,
@@ -75,6 +94,8 @@ class LoopProcessor extends AudioWorkletProcessor {
           cycleLengthSamples: this.engine.cycle_length(),
         },
         tracks: [0, 1].map((trackId) => ({
+          gain: this.engine.track_gain(trackId),
+          muted: Boolean(this.engine.track_muted(trackId)),
           mode: this.engine.playback_mode(trackId) === 1 ? 'OneShot' : 'Loop',
           canSetMode: Boolean(this.engine.can_set_mode(trackId)),
           canSetLoop: Boolean(this.engine.can_set_loop(trackId)),

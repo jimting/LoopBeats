@@ -81,3 +81,11 @@ Mode changes preserve stored samples and require Empty or Stopped state. The eng
 Converting a stopped recording changes neither transport nor cycle. One-shot playback resets its private cursor and starts from zero. Converted Loop PLAY joins the current shared phase; when no cycle exists, PLAY establishes the recording's exact sample length and starts only that track. REC on that converted Loop instead establishes the cycle at zero and immediately begins additive overdub. If two recordings converted before any cycle exists have different lengths, establishing one cycle makes the incompatible retained Loop unavailable for PLAY/REC; it can still convert back to One-shot.
 
 Five native fixtures cover retained samples, active-state rejection, exact compatibility, phase joining, cycle establishment on PLAY/REC and compatibility after another track establishes the cycle. Three production browser cases verify acknowledged selector availability/length explanation and sample-exact retained overdub/One-shot output through actual WASM. Physical M06/M09 remain deferred to #19.
+
+## Timing-independent mixing (#14)
+
+Track gain and mute affect only each track's output contribution. Recording/overdub stores incoming samples at full input volume; mute never pauses capture or either playback cursor. Muted One-shots reach Stopped at their normal sample end. Live monitoring remains independent of track mute.
+
+Master gain multiplies the sum of track contributions and live monitoring before the existing hard clamp to [-1, 1]. Track/master gains accept finite linear values from 0 to 1 (defaults 1); mute defaults off. Invalid values and track IDs are ignored. No gain smoothing or transparent limiter is claimed. Controls send commands through AudioClient; slider percentages and mute state reflect acknowledged engine snapshots. Settings persistence belongs to #16.
+
+Four native known-sample fixtures verify mathematical gains, master-before-clamp, unmodified stored audio, mute phase/capture/overdub and One-shot completion. Two production browser cases verify controls and sample-exact stereo output through actual worklet/WASM. Physical cases M07/M09 remain deferred to #19, including perceptual clicks/overload behavior.

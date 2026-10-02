@@ -18,6 +18,8 @@ pub enum PlaybackMode {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct TrackSnapshot {
+    pub muted: bool,
+    pub gain: f32,
     pub mode: PlaybackMode,
     pub can_set_mode: bool,
     pub can_set_loop: bool,
@@ -33,6 +35,7 @@ pub struct TrackSnapshot {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct EngineSnapshot {
+    pub master_gain: f32,
     pub tracks: [TrackSnapshot; 2],
     pub transport_running: bool,
     pub transport_position_samples: u64,
@@ -45,6 +48,8 @@ struct Transport {
     cycle_length: usize,
 }
 struct Track {
+    muted: bool,
+    gain: f32,
     mode: PlaybackMode,
     one_shot_position: usize,
     recording: LoopBuffer,
@@ -53,6 +58,7 @@ struct Track {
     captured: usize,
 }
 pub struct LoopEngine {
+    master_gain: f32,
     monitoring: bool,
     tracks: [Track; 2],
     transport: Transport,
@@ -74,8 +80,11 @@ impl LoopEngine {
     pub fn with_capacity(samples: usize) -> Self {
         assert!(samples > 0);
         Self {
+            master_gain: 1.0,
             monitoring: false,
             tracks: std::array::from_fn(|_| Track {
+                muted: false,
+                gain: 1.0,
                 mode: PlaybackMode::Loop,
                 one_shot_position: 0,
                 recording: LoopBuffer::new(samples),
@@ -88,6 +97,24 @@ impl LoopEngine {
     }
     pub fn set_monitoring(&mut self, enabled: bool) {
         self.monitoring = enabled;
+    }
+    /// Linear volume controls accept finite values from silence (0) to unity (1).
+    pub fn set_track_gain(&mut self, track_id: usize, gain: f32) {
+        if (0.0..=1.0).contains(&gain) {
+            if let Some(track) = self.tracks.get_mut(track_id) {
+                track.gain = gain;
+            }
+        }
+    }
+    pub fn set_track_mute(&mut self, track_id: usize, muted: bool) {
+        if let Some(track) = self.tracks.get_mut(track_id) {
+            track.muted = muted;
+        }
+    }
+    pub fn set_master_gain(&mut self, gain: f32) {
+        if (0.0..=1.0).contains(&gain) {
+            self.master_gain = gain;
+        }
     }
     pub fn monitoring(&self) -> bool {
         self.monitoring
@@ -213,11 +240,14 @@ impl LoopEngine {
             .iter()
             .any(|track| matches!(track.state, TrackState::Recording | TrackState::Overdubbing));
         EngineSnapshot {
+            master_gain: self.master_gain,
             tracks: std::array::from_fn(|index| {
                 let track = &self.tracks[index];
                 let compatible =
                     self.transport.cycle_length == 0 || track.length == self.transport.cycle_length;
                 TrackSnapshot {
+                    muted: track.muted,
+                    gain: track.gain,
                     mode: track.mode,
                     can_set_mode: matches!(track.state, TrackState::Empty | TrackState::Stopped),
                     can_set_loop: matches!(track.state, TrackState::Empty | TrackState::Stopped)
@@ -300,12 +330,13 @@ impl LoopEngine {
                             phase
                         };
                         let previous = track.recording.read(position);
+                        let gain = if track.muted { 0.0 } else { track.gain };
                         if track.state == TrackState::Overdubbing {
                             let mixed = previous + source;
                             track.recording.write(phase, mixed);
-                            sample += mixed;
+                            sample += mixed * gain;
                         } else {
-                            sample += previous;
+                            sample += previous * gain;
                             if track.mode == PlaybackMode::OneShot {
                                 track.one_shot_position += 1;
                                 if track.one_shot_position == track.length {
@@ -316,7 +347,7 @@ impl LoopEngine {
                     }
                 }
             }
-            *destination = sample.clamp(-1.0, 1.0);
+            *destination = (sample * self.master_gain).clamp(-1.0, 1.0);
             if advance {
                 self.transport.position += 1;
             }
@@ -514,6 +545,44 @@ mod wasm {
                 .tracks
                 .get(track_id)
                 .map(|track| track.can_set_loop as u32)
+                .unwrap_or_default()
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn set_track_gain(track_id: usize, gain: f32) {
+        with_engine(|engine| engine.set_track_gain(track_id, gain));
+    }
+    #[no_mangle]
+    pub extern "C" fn set_track_mute(track_id: usize, muted: u32) {
+        with_engine(|engine| engine.set_track_mute(track_id, muted != 0));
+    }
+    #[no_mangle]
+    pub extern "C" fn set_master_gain(gain: f32) {
+        with_engine(|engine| engine.set_master_gain(gain));
+    }
+    #[no_mangle]
+    pub extern "C" fn master_gain() -> f32 {
+        with_engine(|engine| engine.snapshot().master_gain)
+    }
+    #[no_mangle]
+    pub extern "C" fn track_gain(track_id: usize) -> f32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.gain)
+                .unwrap_or_default()
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn track_muted(track_id: usize) -> u32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.muted as u32)
                 .unwrap_or_default()
         })
     }

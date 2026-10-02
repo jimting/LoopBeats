@@ -80,6 +80,22 @@ export function App() {
             </dd>
           </dl>
         )}
+        <label>
+          Master volume
+          <input
+            type="range"
+            aria-label="Master volume"
+            min="0"
+            max="1"
+            step="0.01"
+            value={snapshot.masterGain}
+            disabled={!ready}
+            onChange={(event) =>
+              client.setMasterGain(Number(event.currentTarget.value))
+            }
+          />
+          <span>{Math.round(snapshot.masterGain * 100)}%</span>
+        </label>
         <section aria-labelledby="transport-heading">
           <h2 id="transport-heading">Transport</h2>
           <p data-testid="transport-state">
@@ -152,6 +168,32 @@ export function App() {
                   length exactly.
                 </p>
               )}
+              <label>
+                Track volume
+                <input
+                  type="range"
+                  aria-label={`Track ${index + 1} volume`}
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={track.gain}
+                  disabled={!ready}
+                  onChange={(event) =>
+                    client.setTrackGain(
+                      trackId,
+                      Number(event.currentTarget.value),
+                    )
+                  }
+                />
+                <span>{Math.round(track.gain * 100)}%</span>
+              </label>
+              <button
+                disabled={!ready}
+                aria-pressed={track.muted}
+                onClick={() => client.setTrackMute(trackId, !track.muted)}
+              >
+                {track.muted ? 'Unmute' : 'Mute'}
+              </button>
               <p data-testid="track-state">{track.state}</p>
               <button
                 disabled={!ready || !track.canRecord}
