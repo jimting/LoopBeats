@@ -4,5 +4,6 @@ export type {
   AudioStatus,
   TrackSnapshot,
   TrackId,
+  PlaybackMode,
   TransportSnapshot,
 } from './audio';

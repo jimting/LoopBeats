@@ -89,7 +89,9 @@ export function App() {
             disabled={
               !ready ||
               (!snapshot.transport.running &&
-                !snapshot.tracks.some((track) => track.state === 'Recording'))
+                !snapshot.tracks.some((track) =>
+                  ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
+                ))
             }
             onClick={() => client.stopTransport()}
           >
@@ -114,10 +116,34 @@ export function App() {
         </section>
         {snapshot.tracks.map((track, index) => {
           const trackId = index as TrackId;
-          const firstCapture = snapshot.transport.cycleLengthSamples === 0;
+          const independentCapture =
+            track.mode === 'OneShot' ||
+            snapshot.transport.cycleLengthSamples === 0;
+          const modeLabel = track.mode === 'OneShot' ? 'One-shot' : 'Loop';
           return (
             <section key={trackId} aria-labelledby={`track-heading-${trackId}`}>
-              <h2 id={`track-heading-${trackId}`}>Track {index + 1} · Loop</h2>
+              <h2 id={`track-heading-${trackId}`}>
+                Track {index + 1} · {modeLabel}
+              </h2>
+              <label>
+                Playback mode
+                <select
+                  aria-label={`Track ${index + 1} playback mode`}
+                  value={track.mode}
+                  disabled={!ready || !track.canSetMode}
+                  onChange={(event) =>
+                    client.setMode(
+                      trackId,
+                      event.currentTarget.value === 'OneShot'
+                        ? 'OneShot'
+                        : 'Loop',
+                    )
+                  }
+                >
+                  <option value="Loop">Loop</option>
+                  <option value="OneShot">One-shot</option>
+                </select>
+              </label>
               <p data-testid="track-state">{track.state}</p>
               <button
                 disabled={!ready || !track.canRecord}
@@ -141,15 +167,19 @@ export function App() {
                 {track.state === 'Overdubbing'
                   ? 'REC ends overdub and keeps playing; Track STOP retains additions.'
                   : track.state === 'Recording'
-                    ? 'REC finishes and loops; Track STOP retains audio silently.'
+                    ? track.mode === 'OneShot'
+                      ? 'REC finishes and plays once; Track STOP retains audio silently.'
+                      : 'REC finishes and loops; Track STOP retains audio silently.'
                     : track.state === 'Empty'
-                      ? firstCapture
+                      ? independentCapture
                         ? 'Press REC to capture up to 60 seconds.'
                         : 'REC captures one full cycle from the current phase; finish early to leave silence elsewhere.'
-                      : 'REC starts overdub immediately while transport runs; PLAY joins the shared cycle; Track STOP retains audio.'}
+                      : track.mode === 'OneShot'
+                        ? 'PLAY retriggers from the beginning once. REC requires CLEAR first; no One-shot overdub.'
+                        : 'REC starts overdub immediately while transport runs; PLAY joins the shared cycle; Track STOP retains audio.'}
               </p>
               <p>
-                {firstCapture
+                {independentCapture
                   ? 'Recording limit: 60 seconds.'
                   : 'Recording limit: one shared cycle.'}{' '}
                 Remaining:{' '}
@@ -176,13 +206,14 @@ export function App() {
                 <span data-testid="loop-length">{track.lengthSamples}</span>
               </p>
               <progress
-                aria-label="Loop progress"
+                aria-label={`${modeLabel} progress`}
                 max={track.lengthSamples || 1}
                 value={track.positionSamples}
               />
               <p>
                 Stop audio closes the session and discards its recordings. Track
-                STOP retains audio. CLEAR follows in a later ticket.
+                STOP retains audio. Select capture mode while Empty; retained
+                mode conversion and CLEAR follow in later tickets.
               </p>
             </section>
           );
