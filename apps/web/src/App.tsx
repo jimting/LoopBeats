@@ -138,13 +138,15 @@ export function App() {
                 Track STOP
               </button>
               <p>
-                {track.state === 'Recording'
-                  ? 'REC finishes and loops; Track STOP retains audio silently.'
-                  : track.state === 'Empty'
-                    ? firstCapture
-                      ? 'Press REC to capture up to 60 seconds.'
-                      : 'REC captures one full cycle from the current phase; finish early to leave silence elsewhere.'
-                    : 'PLAY joins the shared cycle; track STOP retains the recording.'}
+                {track.state === 'Overdubbing'
+                  ? 'REC ends overdub and keeps playing; Track STOP retains additions.'
+                  : track.state === 'Recording'
+                    ? 'REC finishes and loops; Track STOP retains audio silently.'
+                    : track.state === 'Empty'
+                      ? firstCapture
+                        ? 'Press REC to capture up to 60 seconds.'
+                        : 'REC captures one full cycle from the current phase; finish early to leave silence elsewhere.'
+                      : 'REC starts overdub immediately while transport runs; PLAY joins the shared cycle; Track STOP retains audio.'}
               </p>
               <p>
                 {firstCapture

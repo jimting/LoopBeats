@@ -59,7 +59,7 @@ fn live_monitoring_is_independent_of_capture_and_loop_playback() {
 }
 
 #[test]
-fn many_cycles_and_ignored_playing_rec_do_not_change_length_or_phase() {
+fn many_cycles_and_zero_input_overdub_do_not_change_length_or_phase() {
     let mut engine = LoopEngine::with_capacity(8);
     engine.record(0);
     engine.process(&[0.25, -0.5, 0.75], &mut [0.0; 3]);

@@ -1,5 +1,11 @@
 // Numeric states match Rust TrackState's repr(u32) ABI.
-const TRACK_STATE = { Empty: 0, Recording: 1, Playing: 2, Stopped: 3 };
+const TRACK_STATE = {
+  Empty: 0,
+  Recording: 1,
+  Playing: 2,
+  Stopped: 3,
+  Overdubbing: 4,
+};
 const TRACK_STATE_NAMES = Object.keys(TRACK_STATE);
 
 // Real-time callback uses fixed views and counters. Messages allocate outside process().
@@ -103,7 +109,9 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.outputLevel =
       this.engine.monitoring() ||
       this.engine.track_state(0) === TRACK_STATE.Playing ||
-      this.engine.track_state(1) === TRACK_STATE.Playing
+      this.engine.track_state(1) === TRACK_STATE.Playing ||
+      this.engine.track_state(0) === TRACK_STATE.Overdubbing ||
+      this.engine.track_state(1) === TRACK_STATE.Overdubbing
         ? Math.max(outputPeak, this.outputLevel * 0.999)
         : 0;
     this.frames += count;
