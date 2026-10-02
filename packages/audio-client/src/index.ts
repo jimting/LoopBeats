@@ -16,6 +16,7 @@ type Session = {
   cancelStartup?: () => void;
 };
 type WorkletSnapshot = {
+  masterGain: number;
   type: 'snapshot';
   transport: TransportSnapshot;
   tracks: readonly [TrackSnapshot, TrackSnapshot];
@@ -26,6 +27,8 @@ type WorkletSnapshot = {
   outputLevel: number;
 };
 const emptyTrack = (): TrackSnapshot => ({
+  gain: 1,
+  muted: false,
   state: 'Empty',
   mode: 'Loop',
   canSetMode: false,
@@ -40,6 +43,7 @@ const emptyTrack = (): TrackSnapshot => ({
   canStop: false,
 });
 const idle = (): AudioSnapshot => ({
+  masterGain: 1,
   status: 'idle',
   transport: { running: false, positionSamples: 0, cycleLengthSamples: 0 },
   tracks: [emptyTrack(), emptyTrack()],
@@ -194,6 +198,7 @@ export class AudioClient {
               inputLevel: data.inputLevel,
               outputLevel: data.outputLevel,
               tracks: data.tracks,
+              masterGain: data.masterGain,
               transport: data.transport,
             });
             finish();
@@ -244,6 +249,15 @@ export class AudioClient {
   private command(command: AudioCommand): void {
     if (this.snapshot.status === 'ready')
       this.session?.node?.port.postMessage(command);
+  }
+  setTrackGain(trackId: TrackId, gain: number): void {
+    this.command({ type: 'set-track-gain', trackId, gain });
+  }
+  setTrackMute(trackId: TrackId, muted: boolean): void {
+    this.command({ type: 'set-track-mute', trackId, muted });
+  }
+  setMasterGain(gain: number): void {
+    this.command({ type: 'set-master-gain', gain });
   }
   setMode(trackId: TrackId, mode: PlaybackMode): void {
     this.command({ type: 'set-mode', trackId, mode });

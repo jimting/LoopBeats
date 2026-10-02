@@ -2,6 +2,8 @@ export type PlaybackMode = 'Loop' | 'OneShot';
 export type TrackId = 0 | 1;
 export type AudioStatus = 'idle' | 'starting' | 'ready' | 'stopping' | 'error';
 export interface TrackSnapshot {
+  readonly gain: number;
+  readonly muted: boolean;
   readonly mode: PlaybackMode;
   readonly canSetMode: boolean;
   readonly canSetLoop: boolean;
@@ -21,6 +23,7 @@ export interface TransportSnapshot {
   readonly cycleLengthSamples: number;
 }
 export interface AudioSnapshot {
+  readonly masterGain: number;
   readonly transport: TransportSnapshot;
   readonly tracks: readonly [TrackSnapshot, TrackSnapshot];
   readonly status: AudioStatus;
@@ -32,6 +35,9 @@ export interface AudioSnapshot {
   readonly outputLevel: number;
 }
 export type AudioCommand =
+  | { type: 'set-track-gain'; trackId: TrackId; gain: number }
+  | { type: 'set-track-mute'; trackId: TrackId; muted: boolean }
+  | { type: 'set-master-gain'; gain: number }
   | { type: 'monitoring'; enabled: boolean }
   | { type: 'snapshot' }
   | { type: 'set-mode'; trackId: TrackId; mode: PlaybackMode }
