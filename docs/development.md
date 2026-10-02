@@ -51,3 +51,7 @@ Repository administrators can require both jobs in branch protection; adding a w
 Follow the approved ticket map and parent specification. Implement one verifiable slice per PR. Use agreed seams: deterministic engine output, real browser audio boundary where relevant, and observable UI interactions. Foundation tests do not establish audio feasibility, live latency or cross-device support.
 
 Ready means behavior, vocabulary, blockers, acceptance criteria and seam are understood. Done means specified behavior and appropriate tests pass, required browser evidence exists, docs are updated, review is complete and the PR provides evidence. Revisit architecture every 3–5 substantial feature PRs.
+
+## Manual testing with one tester
+
+The [testing strategy](testing/strategy.md) governs feature versus milestone acceptance. Routine physical checks are batched in #19 using the [shared case catalog](testing/manual-validation.md). Feature PRs retain automated gates and review; their tickets can close after merge with manual verification explicitly deferred to #19. Only concrete hardware-only defects/uncertainties justify an early targeted check. Do not duplicate full checklists or block unrelated development on deferred listening. First-version acceptance still requires the integrated desktop run.

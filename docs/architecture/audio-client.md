@@ -1,5 +1,7 @@
 # Audio startup and input monitoring (#7)
 
+Verification scheduling: [the testing strategy](../testing/strategy.md) supersedes historical per-slice manual gates in this document. Routine hardware checks belong to #19; automated checks and review gate feature merges.
+
 AudioClient encapsulates AudioContext, microphone ownership, asset loading, AudioWorklet construction, cancellation and cleanup. React calls start, stop and setMonitoring, then subscribes to immutable snapshots. It never creates browser audio nodes or determines sample timing.
 
 Start must be invoked from a user interaction: context creation/resume happens before asynchronous capture/asset setup. Monitoring is false in a new Rust engine instance. Ready is published only after a worklet snapshot confirms that WASM has processed frames. Monitoring state displayed in the UI is acknowledged by the processing side, rather than optimistically redefined in React.

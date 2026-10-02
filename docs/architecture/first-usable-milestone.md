@@ -79,6 +79,11 @@ Complete foundation tooling and spikes, then deliver small verified slices towar
 The engine owns an authoritative sample-position timeline, cycle alignment, capture and overdub behavior. UI state represents engine state. Commands must execute through a controlled audio boundary, without network/DOM/blocking operations or uncontrolled real-time allocation.
 Sample-level tests must verify alignment, exact cycle wraparound, early-finish silence, one-shot completion/retrigger, stop versus mute, retained overdubs and reset behavior. Long playback must show no cumulative software drift. Browser evidence must cover audio startup/errors and operation under busy UI. The first two-track milestone must demonstrate real synchronization; five tracks, quantization/BPM, effects, undo, session persistence and native hosts remain later work.
 
+## Verification scheduling update (2026-10-02)
+
+Follow [the testing strategy](../testing/strategy.md). Routine physical listening is deferred to integrated milestone #19; feature PRs merge after automated verification and review. An early manual check is limited to a concrete hardware-only uncertainty/regression. This changes scheduling, not product behavior or the final hardware acceptance requirement.
+
 ## Next workflow
 
 Use this confirmed design with GLOSSARY.md and relevant ADRs as inputs to to-spec. Then to-tickets/to-issues proposes a reviewed dependency graph before publishing. No specification issue or implementation tickets were generated during this design-save operation.
+
