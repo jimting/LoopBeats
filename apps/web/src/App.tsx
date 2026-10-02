@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
 
 export function App() {
@@ -88,7 +89,7 @@ export function App() {
             disabled={
               !ready ||
               (!snapshot.transport.running &&
-                snapshot.track.state !== 'Recording')
+                !snapshot.tracks.some((track) => track.state === 'Recording'))
             }
             onClick={() => client.stopTransport()}
           >
@@ -111,65 +112,79 @@ export function App() {
             unfinished first capture is discarded. Monitoring is independent.
           </p>
         </section>
-        <section aria-labelledby="track-heading">
-          <h2 id="track-heading">Track 1 · Loop</h2>
-          <p data-testid="track-state">{snapshot.track.state}</p>
-          <button
-            disabled={!ready || !snapshot.track.canRecord}
-            onClick={() => client.record()}
-          >
-            REC
-          </button>
-          <button
-            disabled={!ready || !snapshot.track.canPlay}
-            onClick={() => client.play()}
-          >
-            PLAY
-          </button>
-          <button
-            disabled={!ready || !snapshot.track.canStop}
-            onClick={() => client.stopTrack()}
-          >
-            Track STOP
-          </button>
-          <p>
-            {snapshot.track.state === 'Recording'
-              ? 'REC finishes and loops; Track STOP retains audio silently.'
-              : snapshot.track.state === 'Empty'
-                ? 'Press REC to capture up to 60 seconds.'
-                : 'PLAY joins the shared cycle; track STOP retains the recording.'}
-          </p>
-          <p>
-            Recording limit: 60 seconds. Remaining:{' '}
-            <span data-testid="capture-remaining">
-              {snapshot.sampleRate
-                ? (
-                    Math.max(
-                      0,
-                      snapshot.track.capacitySamples -
-                        snapshot.track.lengthSamples,
-                    ) / snapshot.sampleRate
-                  ).toFixed(1)
-                : '60.0'}{' '}
-              s
-            </span>
-          </p>
-          <p>
-            Captured samples:{' '}
-            <span data-testid="loop-length">
-              {snapshot.track.lengthSamples}
-            </span>
-          </p>
-          <progress
-            aria-label="Loop progress"
-            max={snapshot.track.lengthSamples || 1}
-            value={snapshot.track.positionSamples}
-          />
-          <p>
-            Stop audio closes the session and discards its recording. Track STOP
-            retains it. CLEAR follows in a later ticket.
-          </p>
-        </section>
+        {snapshot.tracks.map((track, index) => {
+          const trackId = index as TrackId;
+          const firstCapture = snapshot.transport.cycleLengthSamples === 0;
+          return (
+            <section key={trackId} aria-labelledby={`track-heading-${trackId}`}>
+              <h2 id={`track-heading-${trackId}`}>Track {index + 1} · Loop</h2>
+              <p data-testid="track-state">{track.state}</p>
+              <button
+                disabled={!ready || !track.canRecord}
+                onClick={() => client.record(trackId)}
+              >
+                REC
+              </button>
+              <button
+                disabled={!ready || !track.canPlay}
+                onClick={() => client.play(trackId)}
+              >
+                PLAY
+              </button>
+              <button
+                disabled={!ready || !track.canStop}
+                onClick={() => client.stopTrack(trackId)}
+              >
+                Track STOP
+              </button>
+              <p>
+                {track.state === 'Recording'
+                  ? 'REC finishes and loops; Track STOP retains audio silently.'
+                  : track.state === 'Empty'
+                    ? firstCapture
+                      ? 'Press REC to capture up to 60 seconds.'
+                      : 'REC captures one full cycle from the current phase; finish early to leave silence elsewhere.'
+                    : 'PLAY joins the shared cycle; track STOP retains the recording.'}
+              </p>
+              <p>
+                {firstCapture
+                  ? 'Recording limit: 60 seconds.'
+                  : 'Recording limit: one shared cycle.'}{' '}
+                Remaining:{' '}
+                <span data-testid="capture-remaining">
+                  {snapshot.sampleRate
+                    ? (
+                        Math.max(
+                          0,
+                          track.captureLimitSamples - track.capturedSamples,
+                        ) / snapshot.sampleRate
+                      ).toFixed(1)
+                    : '60.0'}{' '}
+                  s
+                </span>
+              </p>
+              <p>
+                Captured samples:{' '}
+                <span data-testid="captured-samples">
+                  {track.capturedSamples}
+                </span>
+              </p>
+              <p>
+                Loop samples:{' '}
+                <span data-testid="loop-length">{track.lengthSamples}</span>
+              </p>
+              <progress
+                aria-label="Loop progress"
+                max={track.lengthSamples || 1}
+                value={track.positionSamples}
+              />
+              <p>
+                Stop audio closes the session and discards its recordings. Track
+                STOP retains audio. CLEAR follows in a later ticket.
+              </p>
+            </section>
+          );
+        })}
       </section>
     </main>
   );

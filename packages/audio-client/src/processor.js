@@ -32,13 +32,16 @@ class LoopProcessor extends AudioWorkletProcessor {
       if (!this.failed) {
         switch (data.type) {
           case 'record':
-            this.engine.record();
+            if (data.trackId === 0 || data.trackId === 1)
+              this.engine.record(data.trackId);
             break;
           case 'play':
-            this.engine.play();
+            if (data.trackId === 0 || data.trackId === 1)
+              this.engine.play(data.trackId);
             break;
           case 'stop-track':
-            this.engine.stop_track();
+            if (data.trackId === 0 || data.trackId === 1)
+              this.engine.stop_track(data.trackId);
             break;
           case 'stop-transport':
             this.engine.stop_transport();
@@ -55,15 +58,17 @@ class LoopProcessor extends AudioWorkletProcessor {
           positionSamples: this.engine.transport_position(),
           cycleLengthSamples: this.engine.cycle_length(),
         },
-        track: {
-          state: TRACK_STATE_NAMES[this.engine.track_state()],
-          lengthSamples: this.engine.loop_length(),
-          capacitySamples: this.engine.recording_capacity(),
-          canRecord: Boolean(this.engine.can_record()),
-          canPlay: Boolean(this.engine.can_play()),
-          canStop: Boolean(this.engine.can_stop()),
-          positionSamples: this.engine.loop_position(),
-        },
+        tracks: [0, 1].map((trackId) => ({
+          state: TRACK_STATE_NAMES[this.engine.track_state(trackId)],
+          lengthSamples: this.engine.loop_length(trackId),
+          capturedSamples: this.engine.captured_samples(trackId),
+          capacitySamples: this.engine.recording_capacity(trackId),
+          captureLimitSamples: this.engine.capture_limit(trackId),
+          canRecord: Boolean(this.engine.can_record(trackId)),
+          canPlay: Boolean(this.engine.can_play(trackId)),
+          canStop: Boolean(this.engine.can_stop(trackId)),
+          positionSamples: this.engine.loop_position(trackId),
+        })),
         inputLevel: this.inputLevel,
         outputLevel: this.outputLevel,
       });
@@ -97,7 +102,8 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.inputLevel = Math.max(inputPeak, this.inputLevel * 0.999);
     this.outputLevel =
       this.engine.monitoring() ||
-      this.engine.track_state() === TRACK_STATE.Playing
+      this.engine.track_state(0) === TRACK_STATE.Playing ||
+      this.engine.track_state(1) === TRACK_STATE.Playing
         ? Math.max(outputPeak, this.outputLevel * 0.999)
         : 0;
     this.frames += count;

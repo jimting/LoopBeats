@@ -10,7 +10,7 @@ npx playwright install --with-deps chromium
 npm run dev
 ```
 
-Vite prints the development URL (normally http://localhost:5173). The application starts actual Rust/WASM audio processing with explicit monitoring, status and retry controls. Track 1 supports mono recording with REC and continuous Loop playback with REC again; Track STOP, PLAY, global STOP, remaining capacity and transport state are available. Extra tracks, CLEAR and overdub follow later. Stop audio discards the temporary recording. Development startup and production builds require Cargo and generate the audio assets automatically. For production preview run `npm run build`, then `npm run preview`.
+Vite prints the development URL (normally http://localhost:5173). The application starts actual Rust/WASM audio processing with explicit monitoring, status and retry controls. Both tracks support mono recording with REC and continuous Loop playback with REC again; either can establish the cycle, and subsequent capture joins the current phase and auto-completes after one elapsed cycle; Track STOP, PLAY, global STOP, remaining capacity and transport state are available. Early completion leaves uncaptured positions silent. Only one capture is available at a time. CLEAR and overdub follow later. Stop audio discards the temporary recording. Development startup and production builds require Cargo and generate the audio assets automatically. For production preview run `npm run build`, then `npm run preview`.
 
 ## Verification commands
 
@@ -38,7 +38,7 @@ Use `npm run format` and `cargo fmt --all` to format. Existing domain/design doc
 
 Playwright starts its own preview server at 127.0.0.1:4173 and refuses an occupied port. Chromium must be installed; Linux libraries can be installed by the --with-deps command. Failure traces are retained under test-results.
 
-The WASM artifact is target/wasm32-unknown-unknown/release/loop_engine.wasm. The production engine owns live-input monitoring and first Loop capture/playback. Native tests verify exact sample replay, wraparound, capture bounds, monitoring and output protection; browser integration crosses the actual WASM/worklet bridge and verifies both output channels. The separate wasm-gain-spike crate has one known-output gain test and an actual AudioWorklet/WASM bridge with browser integration tests. Its generated artifact is copied to apps/web/public/wasm-audio-spike/gain.wasm (git-ignored). Build it with npm run spike:wasm:build before a production web build if serving that experiment. See docs/research/wasm-audio-spike.md for limits and physical-device checks.
+The WASM artifact is target/wasm32-unknown-unknown/release/loop_engine.wasm. The production engine owns live-input monitoring, two Loop tracks and one shared sample transport. Native tests verify exact sample replay, wraparound, capture bounds, monitoring and output protection; browser integration crosses the actual WASM/worklet bridge and verifies both output channels. The separate wasm-gain-spike crate has one known-output gain test and an actual AudioWorklet/WASM bridge with browser integration tests. Its generated artifact is copied to apps/web/public/wasm-audio-spike/gain.wasm (git-ignored). Build it with npm run spike:wasm:build before a production web build if serving that experiment. See docs/research/wasm-audio-spike.md for limits and physical-device checks.
 
 ## CI
 

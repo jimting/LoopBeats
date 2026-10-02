@@ -8,17 +8,23 @@ pub enum TrackState {
     Stopped,
 }
 #[derive(Clone, Copy, Debug)]
-pub struct EngineSnapshot {
+pub struct TrackSnapshot {
     pub state: TrackState,
     pub length_samples: usize,
+    pub captured_samples: usize,
     pub position_samples: usize,
-    pub transport_running: bool,
-    pub transport_position_samples: u64,
-    pub cycle_length_samples: usize,
     pub capacity_samples: usize,
+    pub capture_limit_samples: usize,
     pub can_record: bool,
     pub can_play: bool,
     pub can_stop: bool,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct EngineSnapshot {
+    pub tracks: [TrackSnapshot; 2],
+    pub transport_running: bool,
+    pub transport_position_samples: u64,
+    pub cycle_length_samples: usize,
 }
 #[derive(Default)]
 struct Transport {
@@ -26,11 +32,16 @@ struct Transport {
     position: u64,
     cycle_length: usize,
 }
-pub struct LoopEngine {
-    monitoring: bool,
+struct Track {
     recording: Box<[f32]>,
     state: TrackState,
     length: usize,
+    captured: usize,
+    capture_start: usize,
+}
+pub struct LoopEngine {
+    monitoring: bool,
+    tracks: [Track; 2],
     transport: Transport,
 }
 impl Default for LoopEngine {
@@ -46,14 +57,18 @@ impl LoopEngine {
         assert!((8_000..=192_000).contains(&sample_rate));
         Self::with_capacity(sample_rate as usize * 60)
     }
-    /// Allocate and zero capture storage during initialization, never processing.
+    /// Allocate capture storage during initialization, never processing.
     pub fn with_capacity(samples: usize) -> Self {
         assert!(samples > 0);
         Self {
             monitoring: false,
-            recording: vec![0.0; samples].into_boxed_slice(),
-            state: TrackState::Empty,
-            length: 0,
+            tracks: std::array::from_fn(|_| Track {
+                recording: vec![0.0; samples].into_boxed_slice(),
+                state: TrackState::Empty,
+                length: 0,
+                captured: 0,
+                capture_start: 0,
+            }),
             transport: Transport::default(),
         }
     }
@@ -63,54 +78,75 @@ impl LoopEngine {
     pub fn monitoring(&self) -> bool {
         self.monitoring
     }
-    /// Applied between processing blocks; no UI timestamp controls audio timing.
-    pub fn record(&mut self) {
-        match self.state {
-            TrackState::Empty if self.snapshot().can_record => self.state = TrackState::Recording,
-            TrackState::Empty => {}
-            TrackState::Recording => self.finish_recording(true),
-            TrackState::Playing | TrackState::Stopped => {} // Overdubbing belongs to #11.
-        }
-    }
-    fn finish_recording(&mut self, play: bool) {
-        if self.length == 0 {
-            self.state = TrackState::Empty;
+    /// Invalid track indices and unavailable commands are ignored by the engine.
+    pub fn record(&mut self, track_id: usize) {
+        if track_id >= self.tracks.len() || !self.snapshot().tracks[track_id].can_record {
             return;
         }
-        self.transport.cycle_length = self.length;
-        self.transport.position = 0;
-        self.transport.running = play;
-        self.state = if play {
+        if self.tracks[track_id].state == TrackState::Recording {
+            self.finish_recording(track_id, true);
+        } else {
+            let phase = self.cycle_position();
+            let track = &mut self.tracks[track_id];
+            track.state = TrackState::Recording;
+            track.length = self.transport.cycle_length;
+            track.captured = 0;
+            track.capture_start = phase;
+        }
+    }
+    fn finish_recording(&mut self, track_id: usize, play: bool) {
+        let track = &mut self.tracks[track_id];
+        if track.captured == 0 {
+            track.state = TrackState::Empty;
+            track.length = 0;
+            return;
+        }
+        if self.transport.cycle_length == 0 {
+            track.length = track.captured;
+            self.transport.cycle_length = track.length;
+            self.transport.position = 0;
+            self.transport.running = play;
+        }
+        track.state = if play {
             TrackState::Playing
         } else {
             TrackState::Stopped
         };
     }
-    pub fn stop_track(&mut self) {
-        match self.state {
-            TrackState::Recording => self.finish_recording(false),
-            TrackState::Playing => self.state = TrackState::Stopped,
+    pub fn stop_track(&mut self, track_id: usize) {
+        let Some(track) = self.tracks.get_mut(track_id) else {
+            return;
+        };
+        match track.state {
+            TrackState::Recording => self.finish_recording(track_id, false),
+            TrackState::Playing => track.state = TrackState::Stopped,
             TrackState::Empty | TrackState::Stopped => {}
         }
     }
-    pub fn play(&mut self) {
-        if self.state != TrackState::Stopped {
+    pub fn play(&mut self, track_id: usize) {
+        let Some(track) = self.tracks.get_mut(track_id) else {
+            return;
+        };
+        if track.state != TrackState::Stopped {
             return;
         }
         if !self.transport.running {
             self.transport.position = 0;
             self.transport.running = true;
         }
-        self.state = TrackState::Playing;
+        track.state = TrackState::Playing;
     }
     pub fn stop_transport(&mut self) {
-        match self.state {
-            TrackState::Recording => {
-                self.state = TrackState::Empty;
-                self.length = 0;
+        for track in &mut self.tracks {
+            match track.state {
+                TrackState::Recording => {
+                    track.state = TrackState::Empty;
+                    track.length = 0;
+                    track.captured = 0;
+                }
+                TrackState::Playing => track.state = TrackState::Stopped,
+                TrackState::Empty | TrackState::Stopped => {}
             }
-            TrackState::Playing => self.state = TrackState::Stopped,
-            TrackState::Empty | TrackState::Stopped => {}
         }
         self.transport.running = false;
         self.transport.position = 0;
@@ -123,41 +159,78 @@ impl LoopEngine {
         }
     }
     pub fn snapshot(&self) -> EngineSnapshot {
+        let capture_active = self
+            .tracks
+            .iter()
+            .any(|track| track.state == TrackState::Recording);
         EngineSnapshot {
-            state: self.state,
-            length_samples: self.length,
-            position_samples: self.cycle_position(),
+            tracks: std::array::from_fn(|index| {
+                let track = &self.tracks[index];
+                TrackSnapshot {
+                    state: track.state,
+                    length_samples: track.length,
+                    captured_samples: track.captured,
+                    position_samples: self.cycle_position(),
+                    capacity_samples: track.recording.len(),
+                    capture_limit_samples: if self.transport.cycle_length == 0 {
+                        track.recording.len()
+                    } else {
+                        self.transport.cycle_length
+                    },
+                    can_record: track.state == TrackState::Recording
+                        || (track.state == TrackState::Empty
+                            && !capture_active
+                            && (self.transport.cycle_length == 0 || self.transport.running)),
+                    can_play: track.state == TrackState::Stopped,
+                    can_stop: matches!(track.state, TrackState::Recording | TrackState::Playing),
+                }
+            }),
             transport_running: self.transport.running,
             transport_position_samples: self.transport.position,
             cycle_length_samples: self.transport.cycle_length,
-            capacity_samples: self.recording.len(),
-            can_record: self.state == TrackState::Recording
-                || (self.state == TrackState::Empty
-                    && (self.transport.cycle_length == 0 || self.transport.running)),
-            can_play: self.state == TrackState::Stopped,
-            can_stop: self.state == TrackState::Recording || self.state == TrackState::Playing,
         }
     }
     pub fn process(&mut self, input: &[f32], output: &mut [f32]) {
         for (index, destination) in output.iter_mut().enumerate() {
             let advance = self.transport.running;
+            let phase = self.cycle_position();
             let source = input.get(index).copied().unwrap_or(0.0);
             let mut sample = if self.monitoring { source } else { 0.0 };
-            match self.state {
-                TrackState::Empty | TrackState::Stopped => {}
-                TrackState::Recording => {
-                    self.recording[self.length] = source;
-                    self.length += 1;
-                    if self.length == self.recording.len() {
-                        self.finish_recording(true);
+            for track_id in 0..self.tracks.len() {
+                let track = &mut self.tracks[track_id];
+                match track.state {
+                    TrackState::Empty | TrackState::Stopped => {}
+                    TrackState::Recording => {
+                        let position = if self.transport.cycle_length == 0 {
+                            track.captured
+                        } else {
+                            phase
+                        };
+                        track.recording[position] = source;
+                        track.captured += 1;
+                        if self.transport.cycle_length == 0 {
+                            track.length = track.captured;
+                        }
+                        let limit = if self.transport.cycle_length == 0 {
+                            track.recording.len()
+                        } else {
+                            self.transport.cycle_length
+                        };
+                        if track.captured == limit {
+                            self.finish_recording(track_id, true);
+                        }
                     }
-                }
-                TrackState::Playing => {
-                    sample += self.recording[self.cycle_position()];
+                    TrackState::Playing => {
+                        // Uncaptured positions are logically silent, including after a
+                        // discarded capture. Never clear a whole buffer on the audio thread.
+                        let elapsed = (phase + track.length - track.capture_start) % track.length;
+                        if elapsed < track.captured {
+                            sample += track.recording[phase];
+                        }
+                    }
                 }
             }
             *destination = sample.clamp(-1.0, 1.0);
-            // Capture completion establishes position zero for the next sample.
             if advance {
                 self.transport.position += 1;
             }
@@ -190,36 +263,64 @@ mod wasm {
         unsafe { operation((*core::ptr::addr_of_mut!(ENGINE)).as_mut().unwrap()) }
     }
     #[no_mangle]
-    pub extern "C" fn record() {
-        with_engine(|engine| engine.record())
+    pub extern "C" fn record(track_id: usize) {
+        with_engine(|engine| engine.record(track_id))
     }
     #[no_mangle]
-    pub extern "C" fn play() {
-        with_engine(|engine| engine.play())
+    pub extern "C" fn play(track_id: usize) {
+        with_engine(|engine| engine.play(track_id))
     }
     #[no_mangle]
-    pub extern "C" fn stop_track() {
-        with_engine(|engine| engine.stop_track())
+    pub extern "C" fn stop_track(track_id: usize) {
+        with_engine(|engine| engine.stop_track(track_id))
     }
     #[no_mangle]
     pub extern "C" fn stop_transport() {
         with_engine(|engine| engine.stop_transport())
     }
     #[no_mangle]
-    pub extern "C" fn track_state() -> u32 {
-        with_engine(|engine| engine.snapshot().state as u32)
+    pub extern "C" fn track_state(track_id: usize) -> u32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.state as u32)
+                .unwrap_or_default()
+        })
     }
     #[no_mangle]
-    pub extern "C" fn loop_length() -> usize {
-        with_engine(|engine| engine.snapshot().length_samples)
+    pub extern "C" fn loop_length(track_id: usize) -> usize {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.length_samples)
+                .unwrap_or_default()
+        })
     }
     #[no_mangle]
-    pub extern "C" fn loop_position() -> usize {
-        with_engine(|engine| engine.snapshot().position_samples)
+    pub extern "C" fn loop_position(track_id: usize) -> usize {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.position_samples)
+                .unwrap_or_default()
+        })
     }
     #[no_mangle]
-    pub extern "C" fn recording_capacity() -> usize {
-        with_engine(|engine| engine.snapshot().capacity_samples)
+    pub extern "C" fn recording_capacity(track_id: usize) -> usize {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.capacity_samples)
+                .unwrap_or_default()
+        })
     }
     #[no_mangle]
     pub extern "C" fn transport_running() -> u32 {
@@ -234,16 +335,59 @@ mod wasm {
         with_engine(|engine| engine.snapshot().cycle_length_samples)
     }
     #[no_mangle]
-    pub extern "C" fn can_record() -> u32 {
-        with_engine(|engine| engine.snapshot().can_record as u32)
+    pub extern "C" fn can_record(track_id: usize) -> u32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.can_record)
+                .unwrap_or_default() as u32
+        })
     }
     #[no_mangle]
-    pub extern "C" fn can_play() -> u32 {
-        with_engine(|engine| engine.snapshot().can_play as u32)
+    pub extern "C" fn can_play(track_id: usize) -> u32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.can_play)
+                .unwrap_or_default() as u32
+        })
     }
     #[no_mangle]
-    pub extern "C" fn can_stop() -> u32 {
-        with_engine(|engine| engine.snapshot().can_stop as u32)
+    pub extern "C" fn can_stop(track_id: usize) -> u32 {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.can_stop)
+                .unwrap_or_default() as u32
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn captured_samples(track_id: usize) -> usize {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.captured_samples)
+                .unwrap_or_default()
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn capture_limit(track_id: usize) -> usize {
+        with_engine(|engine| {
+            engine
+                .snapshot()
+                .tracks
+                .get(track_id)
+                .map(|track| track.capture_limit_samples)
+                .unwrap_or_default()
+        })
     }
     #[no_mangle]
     pub extern "C" fn input_ptr() -> *mut f32 {
