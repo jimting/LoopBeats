@@ -140,10 +140,18 @@ export function App() {
                     )
                   }
                 >
-                  <option value="Loop">Loop</option>
+                  <option value="Loop" disabled={!track.canSetLoop}>
+                    Loop
+                  </option>
                   <option value="OneShot">One-shot</option>
                 </select>
               </label>
+              {track.state === 'Stopped' && !track.canSetLoop && (
+                <p>
+                  Loop mode requires the recording to match the shared cycle
+                  length exactly.
+                </p>
+              )}
               <p data-testid="track-state">{track.state}</p>
               <button
                 disabled={!ready || !track.canRecord}
@@ -212,8 +220,8 @@ export function App() {
               />
               <p>
                 Stop audio closes the session and discards its recordings. Track
-                STOP retains audio. Select capture mode while Empty; retained
-                mode conversion and CLEAR follow in later tickets.
+                STOP retains audio. Change playback mode while stopped; Loop
+                requires matching the shared cycle length. CLEAR follows later.
               </p>
             </section>
           );

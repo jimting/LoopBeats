@@ -29,6 +29,7 @@ const emptyTrack = (): TrackSnapshot => ({
   state: 'Empty',
   mode: 'Loop',
   canSetMode: false,
+  canSetLoop: false,
   lengthSamples: 0,
   positionSamples: 0,
   capacitySamples: 0,

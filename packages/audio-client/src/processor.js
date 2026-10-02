@@ -77,6 +77,7 @@ class LoopProcessor extends AudioWorkletProcessor {
         tracks: [0, 1].map((trackId) => ({
           mode: this.engine.playback_mode(trackId) === 1 ? 'OneShot' : 'Loop',
           canSetMode: Boolean(this.engine.can_set_mode(trackId)),
+          canSetLoop: Boolean(this.engine.can_set_loop(trackId)),
           state: TRACK_STATE_NAMES[this.engine.track_state(trackId)],
           lengthSamples: this.engine.loop_length(trackId),
           capturedSamples: this.engine.captured_samples(trackId),
