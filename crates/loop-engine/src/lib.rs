@@ -228,6 +228,11 @@ impl LoopEngine {
         self.transport = Transport::default();
         self.monitoring = false;
     }
+    /// Stop safely for an input/context interruption without losing completed audio.
+    pub fn interrupt(&mut self) {
+        self.stop_transport();
+        self.monitoring = false;
+    }
     pub fn stop_transport(&mut self) {
         for track in &mut self.tracks {
             track.one_shot_position = 0;
@@ -610,6 +615,10 @@ mod wasm {
     #[no_mangle]
     pub extern "C" fn reset() {
         with_engine(|engine| engine.reset());
+    }
+    #[no_mangle]
+    pub extern "C" fn interrupt() {
+        with_engine(|engine| engine.interrupt());
     }
     #[no_mangle]
     pub extern "C" fn input_ptr() -> *mut f32 {

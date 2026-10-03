@@ -48,3 +48,124 @@ test('shows input selection and gates switching during capture', async ({
     .click();
   await expect(input).toBeDisabled();
 });
+
+test('reports a rejected switch and keeps the previous input selected', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices;
+    const original = mediaDevices.getUserMedia.bind(mediaDevices);
+    mediaDevices.enumerateDevices = async () => [
+      {
+        deviceId: 'default',
+        groupId: 'group',
+        kind: 'audioinput',
+        label: 'Default',
+        toJSON() {
+          return this;
+        },
+      },
+      {
+        deviceId: 'usb',
+        groupId: 'group',
+        kind: 'audioinput',
+        label: 'USB',
+        toJSON() {
+          return this;
+        },
+      },
+    ];
+    mediaDevices.getUserMedia = async (constraints) => {
+      const requested = constraints ?? {};
+      const deviceId =
+        typeof requested.audio === 'object' && requested.audio
+          ? (requested.audio as MediaTrackConstraints).deviceId
+          : undefined;
+      if (
+        deviceId &&
+        typeof deviceId === 'object' &&
+        'exact' in deviceId &&
+        deviceId.exact === 'usb'
+      ) {
+        throw new DOMException('USB input unavailable', 'NotReadableError');
+      }
+      return original(constraints);
+    };
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('status')).toContainText('Audio ready');
+  const input = page.getByRole('combobox', { name: 'Audio input' });
+  await input.selectOption('usb');
+  await expect(page.getByRole('alert')).toContainText('could not be opened');
+  await expect(input).toHaveValue('default');
+});
+
+test('does not replace input when recording begins during a delayed switch', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices;
+    const original = mediaDevices.getUserMedia.bind(mediaDevices);
+    mediaDevices.enumerateDevices = async () => [
+      {
+        deviceId: 'default',
+        groupId: 'group',
+        kind: 'audioinput',
+        label: 'Default',
+        toJSON() {
+          return this;
+        },
+      },
+      {
+        deviceId: 'usb',
+        groupId: 'group',
+        kind: 'audioinput',
+        label: 'USB',
+        toJSON() {
+          return this;
+        },
+      },
+    ];
+    mediaDevices.getUserMedia = async (constraints) => {
+      const requested = constraints ?? {};
+      const deviceId =
+        typeof requested.audio === 'object' && requested.audio
+          ? (requested.audio as MediaTrackConstraints).deviceId
+          : undefined;
+      if (
+        deviceId &&
+        typeof deviceId === 'object' &&
+        'exact' in deviceId &&
+        deviceId.exact === 'usb'
+      ) {
+        return new Promise<MediaStream>((resolve) => {
+          (
+            window as unknown as {
+              resolveSwitch: (stream: MediaStream) => void;
+            }
+          ).resolveSwitch = resolve;
+        });
+      }
+      return original(constraints);
+    };
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('status')).toContainText('Audio ready');
+  const input = page.getByRole('combobox', { name: 'Audio input' });
+  await input.selectOption('usb');
+  await expect(
+    page.getByRole('button', { name: 'REC', exact: true }).first(),
+  ).toBeDisabled();
+  await page.evaluate(() => {
+    const resolve = (
+      window as unknown as { resolveSwitch?: (stream: MediaStream) => void }
+    ).resolveSwitch;
+    if (resolve)
+      void navigator.mediaDevices.getUserMedia({ audio: true }).then(resolve);
+  });
+  await expect(
+    page.getByRole('button', { name: 'REC', exact: true }).first(),
+  ).toBeEnabled();
+});

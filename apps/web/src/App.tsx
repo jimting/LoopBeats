@@ -79,6 +79,7 @@ export function App() {
   const [preferredInputId, setPreferredInputId] = useState(
     () => storedSettings?.preferredInputId ?? '',
   );
+  const [switchPending, setSwitchPending] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<Removal | null>(null);
   const confirmation = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -111,7 +112,7 @@ export function App() {
     navigator.mediaDevices?.addEventListener('devicechange', refresh);
     return () =>
       navigator.mediaDevices?.removeEventListener('devicechange', refresh);
-  }, [snapshot.status]);
+  }, [client, snapshot.status]);
   const restored = useRef(false);
   const skipPersistence = useRef(false);
   useEffect(() => {
@@ -180,11 +181,14 @@ export function App() {
     else remove(target);
   };
   const ready = snapshot.status === 'ready';
-  const starting = snapshot.status === 'starting';
+  const starting =
+    snapshot.status === 'starting' || snapshot.status === 'recovering';
   const status = {
     idle: 'Audio stopped',
     starting: 'Starting audio — allow microphone access when prompted',
     ready: 'Audio ready',
+    interrupted: 'Audio interrupted — recordings retained',
+    recovering: 'Reinitializing audio — recordings retained',
     stopping: 'Stopping audio',
     error: 'Audio could not start',
   }[snapshot.status];
@@ -205,7 +209,12 @@ export function App() {
         </p>
         <div className="controls">
           <button
-            disabled={ready || starting || snapshot.status === 'stopping'}
+            disabled={
+              ready ||
+              starting ||
+              snapshot.status === 'stopping' ||
+              snapshot.status === 'interrupted'
+            }
             onClick={() => {
               void client.start(preferredInputId || undefined);
             }}
@@ -213,15 +222,30 @@ export function App() {
             Start audio
           </button>
           <button
-            disabled={!ready && !starting}
+            disabled={!ready && !starting && snapshot.status !== 'interrupted'}
             onClick={() => {
               void client.stop();
             }}
           >
-            {starting ? 'Cancel audio startup' : 'Stop audio'}
+            {snapshot.status === 'recovering'
+              ? 'Cancel recovery and discard session'
+              : starting
+                ? 'Cancel audio startup'
+                : 'Stop audio'}
           </button>
+          {(snapshot.status === 'interrupted' ||
+            snapshot.status === 'recovering') && (
+            <button
+              disabled={snapshot.status !== 'interrupted'}
+              onClick={() => {
+                void client.reinitialize();
+              }}
+            >
+              Reinitialize audio
+            </button>
+          )}
           <button
-            disabled={!ready}
+            disabled={!ready || switchPending}
             aria-pressed={snapshot.monitoring}
             onClick={() => client.setMonitoring(!snapshot.monitoring)}
           >
@@ -234,8 +258,9 @@ export function App() {
             Audio input
             <select
               aria-label="Audio input"
-              value={preferredInputId}
+              value={snapshot.inputDeviceId ?? ''}
               disabled={
+                switchPending ||
                 snapshot.transport.running ||
                 snapshot.tracks.some((track) =>
                   ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
@@ -243,12 +268,15 @@ export function App() {
               }
               onChange={(event) => {
                 const deviceId = event.currentTarget.value;
+                setSwitchPending(true);
                 void client.switchInput(deviceId).then((switched) => {
-                  if (!switched) return;
-                  setPreferredInputId(deviceId);
-                  const current = readSettings() ?? defaultSettings();
-                  writeSettings({ ...current, preferredInputId: deviceId });
-                  void loadInputDevices().then(setInputDevices);
+                  if (switched) {
+                    setPreferredInputId(deviceId);
+                    const current = readSettings() ?? defaultSettings();
+                    writeSettings({ ...current, preferredInputId: deviceId });
+                    void loadInputDevices().then(setInputDevices);
+                  }
+                  setSwitchPending(false);
                 });
               }}
             >
@@ -267,6 +295,13 @@ export function App() {
             recordings are retained and the shared transport is reset.
           </p>
         )}
+        {ready &&
+          preferredInputId &&
+          snapshot.inputDeviceId !== preferredInputId && (
+            <p role="status">
+              Preferred input is unavailable; using the system-selected input.
+            </p>
+          )}
         {ready && (
           <dl className="diagnostics">
             <dt>Sample rate</dt>
@@ -306,7 +341,7 @@ export function App() {
             max="1"
             step="0.01"
             value={snapshot.masterGain}
-            disabled={!ready}
+            disabled={!ready || switchPending}
             onChange={(event) =>
               client.setMasterGain(Number(event.currentTarget.value))
             }
@@ -320,6 +355,7 @@ export function App() {
           </p>
           <button
             disabled={
+              switchPending ||
               !ready ||
               (!snapshot.transport.running &&
                 !snapshot.tracks.some((track) =>
@@ -332,6 +368,7 @@ export function App() {
           </button>
           <button
             disabled={
+              switchPending ||
               !ready ||
               (!snapshot.transport.cycleLengthSamples &&
                 snapshot.tracks.every((track) => track.state === 'Empty'))
@@ -373,7 +410,7 @@ export function App() {
                 <select
                   aria-label={`Track ${index + 1} playback mode`}
                   value={track.mode}
-                  disabled={!ready || !track.canSetMode}
+                  disabled={switchPending || !ready || !track.canSetMode}
                   onChange={(event) =>
                     client.setMode(
                       trackId,
@@ -404,7 +441,7 @@ export function App() {
                   max="1"
                   step="0.01"
                   value={track.gain}
-                  disabled={!ready}
+                  disabled={!ready || switchPending}
                   onChange={(event) =>
                     client.setTrackGain(
                       trackId,
@@ -415,7 +452,7 @@ export function App() {
                 <span>{Math.round(track.gain * 100)}%</span>
               </label>
               <button
-                disabled={!ready}
+                disabled={!ready || switchPending}
                 aria-pressed={track.muted}
                 onClick={() => client.setTrackMute(trackId, !track.muted)}
               >
@@ -423,25 +460,25 @@ export function App() {
               </button>
               <p data-testid="track-state">{track.state}</p>
               <button
-                disabled={!ready || !track.canRecord}
+                disabled={switchPending || !ready || !track.canRecord}
                 onClick={() => client.record(trackId)}
               >
                 REC
               </button>
               <button
-                disabled={!ready || !track.canPlay}
+                disabled={switchPending || !ready || !track.canPlay}
                 onClick={() => client.play(trackId)}
               >
                 PLAY
               </button>
               <button
-                disabled={!ready || !track.canStop}
+                disabled={switchPending || !ready || !track.canStop}
                 onClick={() => client.stopTrack(trackId)}
               >
                 Track STOP
               </button>
               <button
-                disabled={!ready || track.state === 'Empty'}
+                disabled={switchPending || !ready || track.state === 'Empty'}
                 onClick={() => requestRemoval({ kind: 'track', trackId })}
               >
                 CLEAR
@@ -521,7 +558,10 @@ export function App() {
             Audio continues until you confirm.
           </p>
           <button onClick={() => setPendingRemoval(null)}>Cancel</button>
-          <button disabled={!ready} onClick={() => remove(pendingRemoval)}>
+          <button
+            disabled={!ready || switchPending}
+            onClick={() => remove(pendingRemoval)}
+          >
             Confirm
           </button>
         </dialog>
