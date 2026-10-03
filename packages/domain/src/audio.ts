@@ -1,6 +1,13 @@
 export type PlaybackMode = 'Loop' | 'OneShot';
 export type TrackId = 0 | 1;
-export type AudioStatus = 'idle' | 'starting' | 'ready' | 'stopping' | 'error';
+export type AudioStatus =
+  | 'idle'
+  | 'starting'
+  | 'ready'
+  | 'interrupted'
+  | 'recovering'
+  | 'stopping'
+  | 'error';
 export interface TrackSnapshot {
   readonly gain: number;
   readonly muted: boolean;
@@ -46,4 +53,5 @@ export type AudioCommand =
   | { type: 'stop-track'; trackId: TrackId }
   | { type: 'stop-transport' }
   | { type: 'clear'; trackId: TrackId }
-  | { type: 'reset' };
+  | { type: 'reset' }
+  | { type: 'interrupt' };
