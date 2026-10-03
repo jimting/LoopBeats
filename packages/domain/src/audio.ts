@@ -30,6 +30,7 @@ export interface TransportSnapshot {
   readonly cycleLengthSamples: number;
 }
 export interface AudioSnapshot {
+  readonly inputDeviceId: string | null;
   readonly masterGain: number;
   readonly transport: TransportSnapshot;
   readonly tracks: readonly [TrackSnapshot, TrackSnapshot];
