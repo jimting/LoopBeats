@@ -11,6 +11,16 @@ type StoredSettings = {
   tracks: readonly { mode: 'Loop' | 'OneShot'; gain: number; muted: boolean }[];
 };
 
+const defaultSettings = (): StoredSettings => ({
+  confirmClearing: true,
+  preferredInputId: null,
+  masterGain: 1,
+  tracks: [
+    { mode: 'Loop', gain: 1, muted: false },
+    { mode: 'Loop', gain: 1, muted: false },
+  ],
+});
+
 function readSettings(): StoredSettings | null {
   try {
     const value: unknown = JSON.parse(
@@ -163,6 +173,11 @@ export function App() {
         <p role="status">{status}</p>
         {snapshot.error && <p role="alert">{snapshot.error}</p>}
         <p>Use wired headphones. Monitoring starts off in every new session.</p>
+        <p>
+          Recordings are temporary and remain in memory only. The browser may
+          not always show or honor a leave-page warning, so save anything you
+          need before closing or reloading.
+        </p>
         <div className="controls">
           <button
             disabled={ready || starting || snapshot.status === 'stopping'}
@@ -210,9 +225,10 @@ export function App() {
             onChange={(event) => {
               const enabled = event.currentTarget.checked;
               setConfirmClearing(enabled);
-              const current = readSettings();
-              if (current)
-                writeSettings({ ...current, confirmClearing: enabled });
+              writeSettings({
+                ...(readSettings() ?? defaultSettings()),
+                confirmClearing: enabled,
+              });
             }}
           />
           Confirm before clearing
