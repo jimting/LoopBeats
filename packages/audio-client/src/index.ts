@@ -10,6 +10,11 @@ export type { AudioSnapshot } from '@loopbeats/domain';
 
 type Session = {
   context: AudioContext;
+  source?: MediaStreamAudioSourceNode;
+  interrupted?: boolean;
+  recovering?: boolean;
+  recoveryAfterFrames?: number;
+  finishRecovery?: (error?: Error) => void;
   stream?: MediaStream;
   node?: AudioWorkletNode;
   interval?: ReturnType<typeof setInterval>;
@@ -88,11 +93,70 @@ export class AudioClient {
     this.snapshot = snapshot;
     for (const listener of this.listeners) listener();
   }
+  private disconnectInput(session: Session) {
+    session.source?.disconnect();
+    session.source = undefined;
+    session.stream?.getTracks().forEach((track) => {
+      track.onended = null;
+      track.onmute = null;
+      track.stop();
+    });
+    session.stream = undefined;
+  }
+  private watchInput(session: Session) {
+    for (const track of session.stream?.getAudioTracks() ?? []) {
+      track.onended = () =>
+        this.interrupt(session, 'Audio input disconnected.');
+      track.onmute = () =>
+        this.interrupt(session, 'Audio input was interrupted.');
+    }
+  }
+  private poll(session: Session) {
+    clearInterval(session.interval);
+    session.interval = setInterval(() => {
+      if (this.session === session)
+        session.node?.port.postMessage({
+          type: 'snapshot',
+        } satisfies AudioCommand);
+    }, 100);
+  }
+  private interrupt(session: Session, reason: string) {
+    if (
+      this.session !== session ||
+      (session.interrupted && !session.recovering)
+    )
+      return;
+    ++this.attempt;
+    session.interrupted = true;
+    session.recovering = false;
+    session.finishRecovery?.(new Error(reason));
+    clearInterval(session.interval);
+    this.disconnectInput(session);
+    session.node?.disconnect();
+    session.node?.port.postMessage({
+      type: 'interrupt',
+    } satisfies AudioCommand);
+    this.publish({
+      ...this.snapshot,
+      status: 'interrupted',
+      error: `${reason} Completed recordings are retained. Reinitialize audio, then press PLAY when ready.`,
+      monitoring: false,
+      inputLevel: 0,
+      outputLevel: 0,
+    });
+  }
   private async release(session: Session) {
     clearInterval(session.interval);
     session.cancelStartup?.();
-    session.stream?.getTracks().forEach((track) => track.stop());
+    session.finishRecovery?.(new Error('Audio recovery canceled'));
+    session.context.onstatechange = null;
+    this.disconnectInput(session);
     session.node?.disconnect();
+    if (session.node) {
+      session.node.onprocessorerror = null;
+      session.node.port.onmessage = null;
+      session.node.port.close();
+    }
     if (session.context.state !== 'closed')
       await session.context.close().catch(() => {});
   }
@@ -107,7 +171,9 @@ export class AudioClient {
     if (
       this.snapshot.status === 'starting' ||
       this.snapshot.status === 'ready' ||
-      this.snapshot.status === 'stopping'
+      this.snapshot.status === 'stopping' ||
+      this.snapshot.status === 'interrupted' ||
+      this.snapshot.status === 'recovering'
     )
       return;
     const attempt = ++this.attempt;
@@ -175,7 +241,7 @@ export class AudioClient {
           );
         };
         node.port.onmessage = ({ data }: MessageEvent<WorkletSnapshot>) => {
-          if (this.session !== current || attempt !== this.attempt) {
+          if (this.session !== current) {
             finish();
             return;
           }
@@ -189,41 +255,46 @@ export class AudioClient {
             return;
           }
           if (data.processedFrames > 0) {
+            const recovered =
+              current.recovering &&
+              current.recoveryAfterFrames !== undefined &&
+              data.processedFrames > current.recoveryAfterFrames;
+            if (recovered) {
+              current.recovering = false;
+              current.interrupted = false;
+            }
             this.publish({
-              status: 'ready',
-              error: null,
+              status: current.recovering
+                ? 'recovering'
+                : current.interrupted
+                  ? 'interrupted'
+                  : 'ready',
+              error: current.interrupted ? this.snapshot.error : null,
               monitoring: data.monitoring,
               sampleRate: current.context.sampleRate,
               processedFrames: data.processedFrames,
-              inputLevel: data.inputLevel,
-              outputLevel: data.outputLevel,
+              inputLevel: current.interrupted ? 0 : data.inputLevel,
+              outputLevel: current.interrupted ? 0 : data.outputLevel,
               tracks: data.tracks,
               masterGain: data.masterGain,
               transport: data.transport,
             });
+            if (recovered) current.finishRecovery?.();
             finish();
           }
         };
-        current.context
-          .createMediaStreamSource(current.stream!)
-          .connect(node)
-          .connect(current.context.destination);
+        current.source = current.context.createMediaStreamSource(
+          current.stream!,
+        );
+        current.source.connect(node).connect(current.context.destination);
         // Polling observes state only; it never schedules sample-level operations.
-        current.interval = setInterval(() => {
-          if (this.session !== current) {
-            finish();
-            return;
-          }
-          node.port.postMessage({ type: 'snapshot' } satisfies AudioCommand);
-        }, 100);
+        this.poll(current);
       });
       if (attempt !== this.attempt) return;
+      this.watchInput(current);
       current.context.onstatechange = () => {
         if (this.session === current && current.context.state !== 'running')
-          void this.fail(
-            current,
-            'Audio was interrupted. Try Start audio again to create a new session.',
-          );
+          this.interrupt(current, 'Audio context was interrupted.');
       };
     } catch (error) {
       if (attempt !== this.attempt) return;
@@ -236,6 +307,78 @@ export class AudioClient {
         ...idle(),
         status: 'error',
         error: recovery(error, stage),
+      });
+    }
+  }
+  /** Reconnect live input explicitly while retaining the initialized in-memory engine. */
+  async reinitialize(): Promise<void> {
+    const session = this.session;
+    if (!session?.node || this.snapshot.status !== 'interrupted') return;
+    const attempt = ++this.attempt;
+    session.recovering = true;
+    session.recoveryAfterFrames = undefined;
+    this.publish({ ...this.snapshot, status: 'recovering' });
+    try {
+      if (session.context.state === 'closed')
+        throw new Error(
+          'The audio context is closed and cannot resume. Stop audio discards this session so a new one can be started.',
+        );
+      // Resume occurs directly from this explicit user action.
+      await session.context.resume();
+      if (attempt !== this.attempt) return;
+      if (session.context.state !== 'running')
+        throw new Error(
+          'The browser is still interrupting audio. Release the other audio application and retry.',
+        );
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      });
+      if (attempt !== this.attempt || this.session !== session) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      session.stream = stream;
+      if (!stream.getAudioTracks().some((track) => track.readyState === 'live'))
+        throw new Error('The audio input is no longer available.');
+      this.watchInput(session);
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Audio recovery timed out')),
+          5000,
+        );
+        session.finishRecovery = (error) => {
+          clearTimeout(timeout);
+          session.finishRecovery = undefined;
+          if (error) reject(error);
+          else resolve();
+        };
+        session.recoveryAfterFrames = this.snapshot.processedFrames;
+        session.source = session.context.createMediaStreamSource(stream);
+        session.source
+          .connect(session.node!)
+          .connect(session.context.destination);
+        this.poll(session);
+      });
+    } catch (error) {
+      if (attempt !== this.attempt || this.session !== session) return;
+      session.recovering = false;
+      session.interrupted = true;
+      session.finishRecovery?.();
+      clearInterval(session.interval);
+      this.disconnectInput(session);
+      session.node.disconnect();
+      this.publish({
+        ...this.snapshot,
+        status: 'interrupted',
+        error: `${error instanceof Error ? error.message : 'Audio recovery failed.'} Completed recordings are retained; retry Reinitialize audio.`,
+        monitoring: false,
+        inputLevel: 0,
+        outputLevel: 0,
       });
     }
   }

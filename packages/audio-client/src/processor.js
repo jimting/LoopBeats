@@ -81,6 +81,9 @@ class LoopProcessor extends AudioWorkletProcessor {
             if (data.trackId === 0 || data.trackId === 1)
               this.engine.clear(data.trackId);
             break;
+          case 'interrupt':
+            this.engine.interrupt();
+            break;
           case 'reset':
             this.engine.reset();
             break;

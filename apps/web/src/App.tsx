@@ -39,11 +39,14 @@ export function App() {
     else remove(target);
   };
   const ready = snapshot.status === 'ready';
-  const starting = snapshot.status === 'starting';
+  const starting =
+    snapshot.status === 'starting' || snapshot.status === 'recovering';
   const status = {
     idle: 'Audio stopped',
     starting: 'Starting audio — allow microphone access when prompted',
     ready: 'Audio ready',
+    interrupted: 'Audio interrupted — recordings retained',
+    recovering: 'Reinitializing audio — recordings retained',
     stopping: 'Stopping audio',
     error: 'Audio could not start',
   }[snapshot.status];
@@ -59,7 +62,12 @@ export function App() {
         <p>Use wired headphones. Monitoring starts off in every new session.</p>
         <div className="controls">
           <button
-            disabled={ready || starting || snapshot.status === 'stopping'}
+            disabled={
+              ready ||
+              starting ||
+              snapshot.status === 'stopping' ||
+              snapshot.status === 'interrupted'
+            }
             onClick={() => {
               void client.start();
             }}
@@ -67,13 +75,28 @@ export function App() {
             Start audio
           </button>
           <button
-            disabled={!ready && !starting}
+            disabled={!ready && !starting && snapshot.status !== 'interrupted'}
             onClick={() => {
               void client.stop();
             }}
           >
-            {starting ? 'Cancel audio startup' : 'Stop audio'}
+            {snapshot.status === 'recovering'
+              ? 'Cancel recovery and discard session'
+              : starting
+                ? 'Cancel audio startup'
+                : 'Stop audio'}
           </button>
+          {(snapshot.status === 'interrupted' ||
+            snapshot.status === 'recovering') && (
+            <button
+              disabled={snapshot.status !== 'interrupted'}
+              onClick={() => {
+                void client.reinitialize();
+              }}
+            >
+              Reinitialize audio
+            </button>
+          )}
           <button
             disabled={!ready}
             aria-pressed={snapshot.monitoring}
