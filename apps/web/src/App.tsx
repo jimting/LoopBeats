@@ -6,6 +6,7 @@ type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
 const SETTINGS_KEY = 'loopbeats.settings.v1';
 type StoredSettings = {
   confirmClearing: boolean;
+  preferredInputId: string | null;
   masterGain: number;
   tracks: readonly { mode: 'Loop' | 'OneShot'; gain: number; muted: boolean }[];
 };
@@ -38,11 +39,23 @@ function readSettings(): StoredSettings | null {
     });
     return {
       confirmClearing: settings.confirmClearing,
+      preferredInputId:
+        typeof settings.preferredInputId === 'string'
+          ? settings.preferredInputId
+          : null,
       masterGain: Math.max(0, Math.min(1, settings.masterGain)),
       tracks,
     };
   } catch {
     return null;
+  }
+}
+
+function writeSettings(settings: StoredSettings): void {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    // Storage can be unavailable in private or restricted browsing contexts.
   }
 }
 
@@ -65,12 +78,19 @@ export function App() {
   );
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
   const restored = useRef(false);
+  const skipPersistence = useRef(false);
   useEffect(() => {
-    if (snapshot.status !== 'ready' || restored.current || !storedSettings)
+    if (snapshot.status !== 'ready') {
+      restored.current = false;
       return;
+    }
+    if (restored.current) return;
+    const settings = readSettings() ?? storedSettings;
+    if (!settings) return;
     restored.current = true;
-    client.setMasterGain(storedSettings.masterGain);
-    storedSettings.tracks.forEach((track, index) => {
+    skipPersistence.current = true;
+    client.setMasterGain(settings.masterGain);
+    settings.tracks.forEach((track, index) => {
       const trackId = index as TrackId;
       client.setTrackGain(trackId, track.gain);
       client.setTrackMute(trackId, track.muted);
@@ -79,8 +99,13 @@ export function App() {
   }, [client, snapshot.status, storedSettings]);
   useEffect(() => {
     if (snapshot.status !== 'ready') return;
+    if (skipPersistence.current) {
+      skipPersistence.current = false;
+      return;
+    }
     const settings: StoredSettings = {
       confirmClearing,
+      preferredInputId: readSettings()?.preferredInputId ?? null,
       masterGain: snapshot.masterGain,
       tracks: snapshot.tracks.map(({ mode, gain, muted }) => ({
         mode,
@@ -88,11 +113,7 @@ export function App() {
         muted,
       })),
     };
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      // Storage can be unavailable in private or restricted browsing contexts.
-    }
+    writeSettings(settings);
   }, [confirmClearing, snapshot]);
   useEffect(() => {
     const warnIfRecording = (event: BeforeUnloadEvent) => {
@@ -186,9 +207,13 @@ export function App() {
           <input
             type="checkbox"
             checked={confirmClearing}
-            onChange={(event) =>
-              setConfirmClearing(event.currentTarget.checked)
-            }
+            onChange={(event) => {
+              const enabled = event.currentTarget.checked;
+              setConfirmClearing(enabled);
+              const current = readSettings();
+              if (current)
+                writeSettings({ ...current, confirmClearing: enabled });
+            }}
           />
           Confirm before clearing
         </label>
