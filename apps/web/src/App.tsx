@@ -3,9 +3,54 @@ import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
 
 type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
+const SETTINGS_KEY = 'loopbeats.settings.v1';
+type StoredSettings = {
+  confirmClearing: boolean;
+  masterGain: number;
+  tracks: readonly { mode: 'Loop' | 'OneShot'; gain: number; muted: boolean }[];
+};
+
+function readSettings(): StoredSettings | null {
+  try {
+    const value: unknown = JSON.parse(
+      localStorage.getItem(SETTINGS_KEY) ?? 'null',
+    );
+    if (!value || typeof value !== 'object') return null;
+    const settings = value as Partial<StoredSettings>;
+    if (
+      typeof settings.confirmClearing !== 'boolean' ||
+      typeof settings.masterGain !== 'number' ||
+      !Number.isFinite(settings.masterGain)
+    )
+      return null;
+    if (!Array.isArray(settings.tracks) || settings.tracks.length !== 2)
+      return null;
+    const tracks = settings.tracks.map((track) => {
+      if (!track || (track.mode !== 'Loop' && track.mode !== 'OneShot'))
+        throw new Error('invalid settings');
+      if (!Number.isFinite(track.gain) || typeof track.muted !== 'boolean')
+        throw new Error('invalid settings');
+      return {
+        mode: track.mode,
+        gain: Math.max(0, Math.min(1, track.gain)),
+        muted: track.muted,
+      };
+    });
+    return {
+      confirmClearing: settings.confirmClearing,
+      masterGain: Math.max(0, Math.min(1, settings.masterGain)),
+      tracks,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function App() {
-  const [confirmClearing, setConfirmClearing] = useState(true);
+  const [storedSettings] = useState(readSettings);
+  const [confirmClearing, setConfirmClearing] = useState(
+    () => storedSettings?.confirmClearing ?? true,
+  );
   const [pendingRemoval, setPendingRemoval] = useState<Removal | null>(null);
   const confirmation = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -19,6 +64,46 @@ export function App() {
       }),
   );
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  const restored = useRef(false);
+  useEffect(() => {
+    if (snapshot.status !== 'ready' || restored.current || !storedSettings)
+      return;
+    restored.current = true;
+    client.setMasterGain(storedSettings.masterGain);
+    storedSettings.tracks.forEach((track, index) => {
+      const trackId = index as TrackId;
+      client.setTrackGain(trackId, track.gain);
+      client.setTrackMute(trackId, track.muted);
+      if (track.mode === 'OneShot') client.setMode(trackId, track.mode);
+    });
+  }, [client, snapshot.status, storedSettings]);
+  useEffect(() => {
+    if (snapshot.status !== 'ready') return;
+    const settings: StoredSettings = {
+      confirmClearing,
+      masterGain: snapshot.masterGain,
+      tracks: snapshot.tracks.map(({ mode, gain, muted }) => ({
+        mode,
+        gain,
+        muted,
+      })),
+    };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch {
+      // Storage can be unavailable in private or restricted browsing contexts.
+    }
+  }, [confirmClearing, snapshot]);
+  useEffect(() => {
+    const warnIfRecording = (event: BeforeUnloadEvent) => {
+      if (snapshot.tracks.some((track) => track.state !== 'Empty')) {
+        event.preventDefault();
+        event.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', warnIfRecording);
+    return () => window.removeEventListener('beforeunload', warnIfRecording);
+  }, [snapshot.tracks]);
   useEffect(() => {
     const release = () => {
       void client.stop();
@@ -107,7 +192,7 @@ export function App() {
           />
           Confirm before clearing
         </label>
-        <p>This confirmation preference applies until you reload the page.</p>
+        <p>This confirmation preference is saved in this browser.</p>
         <label>
           Master volume
           <input
