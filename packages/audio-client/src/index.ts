@@ -11,6 +11,7 @@ export type { AudioSnapshot } from '@loopbeats/domain';
 type Session = {
   context: AudioContext;
   stream?: MediaStream;
+  source?: MediaStreamAudioSourceNode;
   node?: AudioWorkletNode;
   interval?: ReturnType<typeof setInterval>;
   cancelStartup?: () => void;
@@ -103,7 +104,7 @@ export class AudioClient {
     this.publish({ ...idle(), status: 'error', error: message });
     await this.release(session);
   }
-  async start(): Promise<void> {
+  async start(inputDeviceId?: string): Promise<void> {
     if (
       this.snapshot.status === 'starting' ||
       this.snapshot.status === 'ready' ||
@@ -129,14 +130,27 @@ export class AudioClient {
       await session.context.resume();
       stage = 'input';
       if (attempt !== this.attempt) return;
-      session.stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
+      const audio = {
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        ...(inputDeviceId ? { deviceId: { exact: inputDeviceId } } : {}),
+      } satisfies MediaTrackConstraints;
+      try {
+        session.stream = await navigator.mediaDevices.getUserMedia({ audio });
+      } catch (error) {
+        if (
+          !inputDeviceId ||
+          !['NotFoundError', 'OverconstrainedError'].includes(
+            error instanceof DOMException ? error.name : '',
+          )
+        )
+          throw error;
+        session.stream = await navigator.mediaDevices.getUserMedia({
+          audio: { ...audio, deviceId: undefined },
+        });
+      }
       if (attempt !== this.attempt) {
         await this.release(session);
         return;
@@ -204,10 +218,10 @@ export class AudioClient {
             finish();
           }
         };
-        current.context
-          .createMediaStreamSource(current.stream!)
-          .connect(node)
-          .connect(current.context.destination);
+        current.source = current.context.createMediaStreamSource(
+          current.stream!,
+        );
+        current.source.connect(node).connect(current.context.destination);
         // Polling observes state only; it never schedules sample-level operations.
         current.interval = setInterval(() => {
           if (this.session !== current) {
@@ -237,6 +251,39 @@ export class AudioClient {
         status: 'error',
         error: recovery(error, stage),
       });
+    }
+  }
+  async switchInput(inputDeviceId: string): Promise<boolean> {
+    const session = this.session;
+    if (this.snapshot.status !== 'ready' || !session?.node || !session.stream)
+      return false;
+    const active = this.snapshot.tracks.some((track) =>
+      ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
+    );
+    if (active || this.snapshot.transport.running) return false;
+    try {
+      const audio = {
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        ...(inputDeviceId ? { deviceId: { exact: inputDeviceId } } : {}),
+      } satisfies MediaTrackConstraints;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio });
+      const source = session.context.createMediaStreamSource(stream);
+      source.connect(session.node);
+      session.source?.disconnect();
+      session.stream.getTracks().forEach((track) => track.stop());
+      session.stream = stream;
+      session.source = source;
+      this.stopTransport();
+      return true;
+    } catch (error) {
+      this.publish({
+        ...this.snapshot,
+        error: recovery(error, 'input'),
+      });
+      return false;
     }
   }
   setMonitoring(enabled: boolean): void {

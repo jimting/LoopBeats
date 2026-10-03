@@ -3,6 +3,7 @@ import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
 
 type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
+type InputDevice = { id: string; label: string };
 const SETTINGS_KEY = 'loopbeats.settings.v1';
 type StoredSettings = {
   confirmClearing: boolean;
@@ -74,6 +75,10 @@ export function App() {
   const [confirmClearing, setConfirmClearing] = useState(
     () => storedSettings?.confirmClearing ?? true,
   );
+  const [inputDevices, setInputDevices] = useState<readonly InputDevice[]>([]);
+  const [preferredInputId, setPreferredInputId] = useState(
+    () => storedSettings?.preferredInputId ?? '',
+  );
   const [pendingRemoval, setPendingRemoval] = useState<Removal | null>(null);
   const confirmation = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -87,6 +92,26 @@ export function App() {
       }),
   );
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  const loadInputDevices = async (): Promise<readonly InputDevice[]> => {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((device) => device.kind === 'audioinput')
+      .map((device, index) => ({
+        id: device.deviceId,
+        label: device.label || `Audio input ${index + 1}`,
+      }));
+  };
+  useEffect(() => {
+    if (snapshot.status !== 'ready') return;
+    const refresh = () => {
+      void loadInputDevices().then(setInputDevices);
+    };
+    refresh();
+    navigator.mediaDevices?.addEventListener('devicechange', refresh);
+    return () =>
+      navigator.mediaDevices?.removeEventListener('devicechange', refresh);
+  }, [snapshot.status]);
   const restored = useRef(false);
   const skipPersistence = useRef(false);
   useEffect(() => {
@@ -182,7 +207,7 @@ export function App() {
           <button
             disabled={ready || starting || snapshot.status === 'stopping'}
             onClick={() => {
-              void client.start();
+              void client.start(preferredInputId || undefined);
             }}
           >
             Start audio
@@ -204,6 +229,44 @@ export function App() {
           </button>
         </div>
         <p>{snapshot.monitoring ? 'Monitoring on' : 'Monitoring off'}</p>
+        {ready && inputDevices.length > 0 && (
+          <label>
+            Audio input
+            <select
+              aria-label="Audio input"
+              value={preferredInputId}
+              disabled={
+                snapshot.transport.running ||
+                snapshot.tracks.some((track) =>
+                  ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
+                )
+              }
+              onChange={(event) => {
+                const deviceId = event.currentTarget.value;
+                void client.switchInput(deviceId).then((switched) => {
+                  if (!switched) return;
+                  setPreferredInputId(deviceId);
+                  const current = readSettings() ?? defaultSettings();
+                  writeSettings({ ...current, preferredInputId: deviceId });
+                  void loadInputDevices().then(setInputDevices);
+                });
+              }}
+            >
+              <option value="">System default</option>
+              {inputDevices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {ready && (
+          <p>
+            Stop playback and capture before changing inputs. Completed
+            recordings are retained and the shared transport is reset.
+          </p>
+        )}
         {ready && (
           <dl className="diagnostics">
             <dt>Sample rate</dt>
