@@ -20,7 +20,9 @@ type Session = {
   interval?: ReturnType<typeof setInterval>;
   cancelStartup?: () => void;
   inputDeviceId?: string;
+  preferredInputId?: string;
   switching?: boolean;
+  switchToken?: number;
 };
 type WorkletSnapshot = {
   masterGain: number;
@@ -223,6 +225,7 @@ export class AudioClient {
       }
       session.inputDeviceId =
         session.stream.getAudioTracks()[0]?.getSettings().deviceId || undefined;
+      session.preferredInputId = inputDeviceId;
       if (attempt !== this.attempt) {
         await this.release(session);
         return;
@@ -347,6 +350,8 @@ export class AudioClient {
     );
     if (active || this.snapshot.transport.running) return false;
     session.switching = true;
+    const switchToken = (session.switchToken ?? 0) + 1;
+    session.switchToken = switchToken;
     const attempt = this.attempt;
     let replacement: MediaStream | undefined;
     try {
@@ -376,11 +381,17 @@ export class AudioClient {
       const source = session.context.createMediaStreamSource(replacement);
       source.connect(session.node);
       session.source?.disconnect();
-      session.stream.getTracks().forEach((track) => track.stop());
+      session.stream.getTracks().forEach((track) => {
+        track.onended = null;
+        track.onmute = null;
+        track.stop();
+      });
       session.stream = replacement;
       session.source = source;
       session.inputDeviceId =
         replacement.getAudioTracks()[0]?.getSettings().deviceId || undefined;
+      session.preferredInputId = inputDeviceId;
+      this.watchInput(session);
       this.inputError = null;
       this.stopTransport();
       return true;
@@ -392,8 +403,7 @@ export class AudioClient {
       }
       return false;
     } finally {
-      if (this.session === session && attempt === this.attempt)
-        session.switching = false;
+      if (session.switchToken === switchToken) session.switching = false;
     }
   }
   /** Reconnect live input explicitly while retaining the initialized in-memory engine. */
@@ -416,19 +426,37 @@ export class AudioClient {
         throw new Error(
           'The browser is still interrupting audio. Release the other audio application and retry.',
         );
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
+      const preferredInputId = session.preferredInputId;
+      const audio = {
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        ...(preferredInputId ? { deviceId: { exact: preferredInputId } } : {}),
+      } satisfies MediaTrackConstraints;
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio });
+      } catch (error) {
+        if (
+          !preferredInputId ||
+          !['NotFoundError', 'OverconstrainedError'].includes(
+            error instanceof DOMException ? error.name : '',
+          )
+        )
+          throw error;
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { ...audio, deviceId: undefined },
+        });
+      }
       if (attempt !== this.attempt || this.session !== session) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       session.stream = stream;
+      session.inputDeviceId =
+        stream.getAudioTracks()[0]?.getSettings().deviceId || undefined;
+      this.inputError = null;
       if (!stream.getAudioTracks().some((track) => track.readyState === 'live'))
         throw new Error('The audio input is no longer available.');
       this.watchInput(session);

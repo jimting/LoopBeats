@@ -40,7 +40,7 @@ test('shows input selection and gates switching during capture', async ({
   await expect(page.getByRole('status')).toContainText('Audio ready');
   const input = page.getByRole('combobox', { name: 'Audio input' });
   await expect(input).toBeVisible();
-  await expect(input).toHaveValue('');
+  await expect(input).toHaveValue('default');
   await page
     .getByRole('region', { name: /Track 1/ })
     .first()
