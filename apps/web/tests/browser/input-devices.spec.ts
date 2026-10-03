@@ -99,6 +99,14 @@ test('reports a rejected switch and keeps the previous input selected', async ({
   await input.selectOption('usb');
   await expect(page.getByRole('alert')).toContainText('could not be opened');
   await expect(input).toHaveValue('default');
+  const track = page.getByRole('region', { name: /Track 1/ }).first();
+  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await expect
+    .poll(async () =>
+      Number(await track.getByTestId('captured-samples').textContent()),
+    )
+    .toBeGreaterThan(24000);
+  await expect(page.getByRole('alert')).toContainText('could not be opened');
 });
 
 test('does not replace input when recording begins during a delayed switch', async ({
