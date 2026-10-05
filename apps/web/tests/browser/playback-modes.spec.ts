@@ -22,7 +22,7 @@ test('stopped mode controls preserve audio and active playback locks conversion'
     .locator('section')
     .filter({ has: page.locator('#track-heading-0') })
     .last();
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
@@ -34,13 +34,15 @@ test('stopped mode controls preserve audio and active playback locks conversion'
   await expect(mode).toBeEnabled();
   await mode.selectOption('Loop');
   await expect(page.getByTestId('cycle-length')).toHaveText('0');
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
+  await expect(track.getByTestId('track-state')).toHaveText('Playing');
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Overdubbing');
   await expect(mode).toBeDisabled();
   await expect(page.getByTestId('cycle-length')).toHaveText(length!);
   await track.getByRole('button', { name: 'Track STOP' }).click();
   await mode.selectOption('OneShot');
-  await track.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(mode).toBeDisabled();
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
   await expect(mode).toBeEnabled();
@@ -59,13 +61,13 @@ test('incompatible stopped One-shot disables Loop selection and explains the req
     name: 'Track 1 · Loop',
     exact: true,
   });
-  await first.getByRole('button', { name: 'REC', exact: true }).click();
+  await first.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await first.getByTestId('captured-samples').textContent()),
     )
     .toBeGreaterThanOrEqual(24000);
-  await first.getByRole('button', { name: 'REC', exact: true }).click();
+  await first.getByRole('button', { name: /REC\/PLAY/ }).click();
   const cycle = Number(await page.getByTestId('cycle-length').textContent());
   const mode = page.getByRole('combobox', { name: 'Track 2 playback mode' });
   await mode.selectOption('OneShot');
@@ -73,7 +75,7 @@ test('incompatible stopped One-shot disables Loop selection and explains the req
     name: 'Track 2 · One-shot',
     exact: true,
   });
-  await second.getByRole('button', { name: 'REC', exact: true }).click();
+  await second.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await second.getByTestId('captured-samples').textContent()),
@@ -86,9 +88,7 @@ test('incompatible stopped One-shot disables Loop selection and explains the req
     '',
   );
   await expect(second).toContainText('match the shared cycle length exactly');
-  await expect(
-    second.getByRole('button', { name: 'PLAY', exact: true }),
-  ).toBeEnabled();
+  await expect(second.getByRole('button', { name: /REC\/PLAY/ })).toBeEnabled();
 });
 
 test('actual worklet conversion establishes cycle on REC, preserves samples and rejects active mode changes', async ({

@@ -56,6 +56,9 @@ test.beforeEach(async ({ page }) => {
     };
   });
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
 });
 
 test('successful selection retains Loop and cycle, saves preference, and restores after reload', async ({
@@ -63,13 +66,13 @@ test('successful selection retains Loop and cycle, saves preference, and restore
 }) => {
   await page.getByRole('button', { name: 'Start audio' }).click();
   const track = page.getByRole('region', { name: /Track 1/ }).first();
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
     )
     .toBeGreaterThan(24000);
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   const length = await track.getByTestId('loop-length').textContent();
   await page.getByRole('button', { name: 'Global STOP' }).click();
@@ -90,10 +93,13 @@ test('successful selection retains Loop and cycle, saves preference, and restore
       ),
     )
     .toBe('usb');
-  await track.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await page.getByRole('button', { name: 'Stop audio' }).click();
   await page.reload();
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('combobox', { name: 'Audio input' })).toHaveValue(
     'usb',
@@ -110,6 +116,9 @@ test('unavailable persisted input falls back and displays actual device', async 
   );
   await page.getByRole('button', { name: 'Stop audio' }).click();
   await page.reload();
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.evaluate(() => {
     (
       window as unknown as { inputFixture: { missing: boolean } }

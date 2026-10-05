@@ -14,19 +14,23 @@ test('CLEAR confirmation keeps audio running, cancel retains it, and reset remov
   page,
 }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
+  await page.getByText('Track 1 details', { exact: true }).click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   const track = page.getByRole('region', {
     name: 'Track 1 · Loop',
     exact: true,
   });
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
     )
     .toBeGreaterThanOrEqual(24000);
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   const length = await track.getByTestId('loop-length').textContent();
   await track.getByRole('button', { name: 'CLEAR', exact: true }).click();
@@ -70,6 +74,10 @@ test('confirmation can be disabled and reenabled, and cleared One-shot can recor
   page,
 }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
+  await page.getByText('Track 1 details', { exact: true }).click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   await page
@@ -79,7 +87,7 @@ test('confirmation can be disabled and reenabled, and cleared One-shot can recor
     name: 'Track 1 · One-shot',
     exact: true,
   });
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
@@ -93,10 +101,8 @@ test('confirmation can be disabled and reenabled, and cleared One-shot can recor
   await track.getByRole('button', { name: 'CLEAR', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(track.getByTestId('track-state')).toHaveText('Empty');
-  await expect(
-    track.getByRole('button', { name: 'REC', exact: true }),
-  ).toBeEnabled();
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await expect(track.getByRole('button', { name: /REC\/PLAY/ })).toBeEnabled();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Recording');
   await page.getByRole('checkbox', { name: 'Confirm before clearing' }).check();
   await track.getByRole('button', { name: 'CLEAR', exact: true }).click();
@@ -112,6 +118,10 @@ test('actual worklet CLEAR keeps other audio and cycle while reset silences and 
   page,
 }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
+  await page.getByText('Track 1 details', { exact: true }).click();
   const result = await page.evaluate(async () => {
     const rate = 48000,
       context = new OfflineAudioContext(2, 1024, rate);

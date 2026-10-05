@@ -22,35 +22,37 @@ test('One-shot controls retrigger, stop globally without a Loop transport, and r
     name: 'Track 1 · One-shot',
     exact: true,
   });
-  const rec = track.getByRole('button', { name: 'REC', exact: true });
-  const play = track.getByRole('button', { name: 'PLAY', exact: true });
-  await rec.click();
+  const primaryAction = track.getByRole('button', { name: /REC\/PLAY/ });
+  await primaryAction.click();
   await expect(track.getByTestId('track-state')).toHaveText('Recording');
   await expect(mode).toBeDisabled();
   await expect(
     page
       .getByRole('region', { name: 'Track 2 · Loop', exact: true })
-      .getByRole('button', { name: 'REC', exact: true }),
+      .getByRole('button', { name: /REC\/PLAY/ }),
   ).toBeDisabled();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
     )
     .toBeGreaterThanOrEqual(96000);
-  await rec.click();
+  await primaryAction.click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
-  await expect(rec).toBeDisabled();
-  await expect(play).toBeEnabled();
+  await expect(primaryAction).toBeEnabled();
+  await expect(primaryAction).toHaveAccessibleName(
+    'Track 1 REC/PLAY — Retrigger',
+  );
   await expect(page.getByTestId('cycle-length')).toHaveText('0');
   await expect(page.getByTestId('transport-state')).toHaveText('Stopped');
-  await play.click(); // Retrigger even while Playing.
+  await primaryAction.click(); // Retrigger even while Playing.
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await page.getByRole('button', { name: 'Global STOP' }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
+  await expect(primaryAction).toHaveAccessibleName('Track 1 REC/PLAY — Play');
   const length = await track.getByTestId('loop-length').textContent();
-  await expect(rec).toBeDisabled();
+  await expect(primaryAction).toBeEnabled();
   await expect(mode).toBeEnabled(); // Completed audio can convert while stopped.
-  await play.click();
+  await primaryAction.click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
   await expect(track.getByTestId('loop-length')).toHaveText(length!);

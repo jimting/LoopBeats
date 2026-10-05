@@ -22,8 +22,8 @@ test('second track controls enforce capture ownership and restart only the selec
     name: 'Track 2 · Loop',
     exact: true,
   });
-  const rec1 = first.getByRole('button', { name: 'REC', exact: true });
-  const rec2 = second.getByRole('button', { name: 'REC', exact: true });
+  const rec1 = first.getByRole('button', { name: /REC\/PLAY/ });
+  const rec2 = second.getByRole('button', { name: /REC\/PLAY/ });
   await expect(rec2).toBeDisabled();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
@@ -50,14 +50,15 @@ test('second track controls enforce capture ownership and restart only the selec
   await second.getByRole('button', { name: 'Track STOP', exact: true }).click();
   await expect(second.getByTestId('track-state')).toHaveText('Stopped');
   await expect(first.getByTestId('track-state')).toHaveText('Playing');
-  await second.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await second.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(second.getByTestId('track-state')).toHaveText('Playing');
   await page.getByRole('button', { name: 'Global STOP' }).click();
   await expect(first.getByTestId('track-state')).toHaveText('Stopped');
   await expect(second.getByTestId('track-state')).toHaveText('Stopped');
   await expect(page.getByTestId('transport-position')).toHaveText('0');
-  await expect(rec2).toBeDisabled();
-  await second.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await expect(rec2).toHaveAccessibleName('Track 2 REC/PLAY — Play');
+  await expect(rec2).toBeEnabled();
+  await second.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(second.getByTestId('track-state')).toHaveText('Playing');
   await expect(first.getByTestId('track-state')).toHaveText('Stopped');
   await expect(page.getByTestId('output-level')).not.toHaveText('0.000');

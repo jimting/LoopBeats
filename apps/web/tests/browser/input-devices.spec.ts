@@ -36,6 +36,9 @@ test('shows input selection and gates switching during capture', async ({
     ];
   });
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   const input = page.getByRole('combobox', { name: 'Audio input' });
@@ -44,7 +47,7 @@ test('shows input selection and gates switching during capture', async ({
   await page
     .getByRole('region', { name: /Track 1/ })
     .first()
-    .getByRole('button', { name: 'REC', exact: true })
+    .getByRole('button', { name: /REC\/PLAY/ })
     .click();
   await expect(input).toBeDisabled();
 });
@@ -93,6 +96,9 @@ test('reports a rejected switch and keeps the previous input selected', async ({
     };
   });
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   const input = page.getByRole('combobox', { name: 'Audio input' });
@@ -100,7 +106,7 @@ test('reports a rejected switch and keeps the previous input selected', async ({
   await expect(page.getByRole('alert')).toContainText('could not be opened');
   await expect(input).toHaveValue('default');
   const track = page.getByRole('region', { name: /Track 1/ }).first();
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
@@ -159,12 +165,15 @@ test('does not replace input when recording begins during a delayed switch', asy
     };
   });
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   const input = page.getByRole('combobox', { name: 'Audio input' });
   await input.selectOption('usb');
   await expect(
-    page.getByRole('button', { name: 'REC', exact: true }).first(),
+    page.getByRole('button', { name: /REC\/PLAY/ }).first(),
   ).toBeDisabled();
   await page.evaluate(() => {
     const resolve = (
@@ -174,6 +183,6 @@ test('does not replace input when recording begins during a delayed switch', asy
       void navigator.mediaDevices.getUserMedia({ audio: true }).then(resolve);
   });
   await expect(
-    page.getByRole('button', { name: 'REC', exact: true }).first(),
+    page.getByRole('button', { name: /REC\/PLAY/ }).first(),
   ).toBeEnabled();
 });

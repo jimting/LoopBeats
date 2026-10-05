@@ -28,13 +28,13 @@ test('suspended context retains completed Loop and requires explicit reinitializ
     name: 'Track 1 · Loop',
     exact: true,
   });
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
     )
     .toBeGreaterThanOrEqual(24000);
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   const length = await track.getByTestId('loop-length').textContent();
   await page.evaluate(() =>
@@ -44,9 +44,7 @@ test('suspended context retains completed Loop and requires explicit reinitializ
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
   await expect(track.getByTestId('loop-length')).toHaveText(length!);
   await expect(page.getByTestId('transport-position')).toHaveText('0');
-  await expect(
-    track.getByRole('button', { name: 'PLAY', exact: true }),
-  ).toBeDisabled();
+  await expect(track.getByRole('button', { name: /REC\/PLAY/ })).toBeDisabled();
   await page.evaluate(() =>
     (window as unknown as { testContext: AudioContext }).testContext.resume(),
   );
@@ -55,6 +53,6 @@ test('suspended context retains completed Loop and requires explicit reinitializ
   await expect(page.getByRole('status')).toContainText('Audio ready');
   await expect(track.getByTestId('track-state')).toHaveText('Stopped');
   await expect(track.getByTestId('loop-length')).toHaveText(length!);
-  await track.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
 });
