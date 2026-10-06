@@ -317,14 +317,22 @@ export function App() {
               disabled={
                 switchPending ||
                 !ready ||
-                (!snapshot.transport.running &&
-                  !snapshot.tracks.some((track) =>
+                !snapshot.tracks.some((track) =>
+                  ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
+                )
+              }
+              onClick={() => {
+                if (
+                  ready &&
+                  !switchPending &&
+                  snapshot.tracks.some((track) =>
                     ['Recording', 'Playing', 'Overdubbing'].includes(
                       track.state,
                     ),
-                  ))
-              }
-              onClick={() => client.stopTransport()}
+                  )
+                )
+                  client.stopTransport();
+              }}
             >
               Global STOP
             </button>

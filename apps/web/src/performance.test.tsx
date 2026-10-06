@@ -9,6 +9,7 @@ const host = vi.hoisted(() => ({
   record: vi.fn(),
   play: vi.fn(),
   switchInput: vi.fn(),
+  stopTransport: vi.fn(),
 }));
 vi.mock('@loopbeats/audio-client', () => ({
   AudioClient: class {
@@ -20,6 +21,7 @@ vi.mock('@loopbeats/audio-client', () => ({
     record = host.record;
     play = host.play;
     switchInput = host.switchInput;
+    stopTransport = host.stopTransport;
     stop = vi.fn();
     setMasterGain = vi.fn();
     setTrackGain = vi.fn();
@@ -229,6 +231,55 @@ test('first capture shows elapsed capacity rather than an invented repeating cyc
   const progress = screen.getAllByRole('progressbar')[0];
   expect(progress).toHaveAttribute('max', '2880000');
   expect(progress).toHaveAttribute('value', '24000');
+});
+
+test('Global STOP does nothing when all tracks are empty even with a retained running cycle', () => {
+  host.snapshot = {
+    ...host.snapshot,
+    transport: {
+      running: true,
+      positionSamples: 12000,
+      cycleLengthSamples: 48000,
+    },
+  };
+  render(<App />);
+  const stop = screen.getByRole('button', { name: 'Global STOP' });
+  expect(stop).toBeDisabled();
+  fireEvent.click(stop);
+  expect(host.stopTransport).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole('button', { name: /Track 1 REC\/PLAY/ }),
+  ).toBeEnabled();
+});
+
+test('Global STOP does nothing when all retained tracks are stopped', () => {
+  host.snapshot = {
+    ...host.snapshot,
+    transport: {
+      running: true,
+      positionSamples: 12000,
+      cycleLengthSamples: 48000,
+    },
+    tracks: [
+      {
+        ...host.snapshot.tracks[0],
+        state: 'Stopped',
+        lengthSamples: 48000,
+        canPlay: true,
+      },
+      {
+        ...host.snapshot.tracks[1],
+        state: 'Stopped',
+        lengthSamples: 48000,
+        canPlay: true,
+      },
+    ],
+  };
+  render(<App />);
+  const stop = screen.getByRole('button', { name: 'Global STOP' });
+  expect(stop).toBeDisabled();
+  fireEvent.click(stop);
+  expect(host.stopTransport).not.toHaveBeenCalled();
 });
 
 test.each(['Loop', 'OneShot'] as const)(
