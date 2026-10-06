@@ -182,6 +182,12 @@ export function App() {
     else remove(target);
   };
   const ready = snapshot.status === 'ready';
+  const tracksActive = snapshot.tracks.some((track) =>
+    ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
+  );
+  const tracksPlayable = snapshot.tracks.some(
+    (track) => track.state === 'Stopped' && track.canPlay,
+  );
   const starting =
     snapshot.status === 'starting' || snapshot.status === 'recovering';
   const status = {
@@ -315,26 +321,15 @@ export function App() {
             </p>
             <button
               disabled={
-                switchPending ||
-                !ready ||
-                !snapshot.tracks.some((track) =>
-                  ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
-                )
+                switchPending || !ready || (!tracksActive && !tracksPlayable)
               }
               onClick={() => {
-                if (
-                  ready &&
-                  !switchPending &&
-                  snapshot.tracks.some((track) =>
-                    ['Recording', 'Playing', 'Overdubbing'].includes(
-                      track.state,
-                    ),
-                  )
-                )
-                  client.stopTransport();
+                if (!ready || switchPending) return;
+                if (tracksActive) client.stopTransport();
+                else if (tracksPlayable) client.startTracks();
               }}
             >
-              Global STOP
+              {tracksActive ? 'Global STOP' : 'Global Start'}
             </button>
           </section>
         </div>

@@ -90,7 +90,7 @@ for (const [name, first, second] of [
       }),
     ).toHaveAttribute('aria-pressed', String(second.muted));
     for (const control of [
-      page.getByRole('button', { name: 'Global STOP' }),
+      page.getByRole('button', { name: /^Global (STOP|Start)$/ }),
       page.getByRole('slider', { name: 'Master volume' }),
       ...(await page.getByRole('button', { name: /REC\/PLAY/ }).all()),
       ...(await page

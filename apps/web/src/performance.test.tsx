@@ -10,6 +10,7 @@ const host = vi.hoisted(() => ({
   play: vi.fn(),
   switchInput: vi.fn(),
   stopTransport: vi.fn(),
+  startTracks: vi.fn(),
 }));
 vi.mock('@loopbeats/audio-client', () => ({
   AudioClient: class {
@@ -22,6 +23,7 @@ vi.mock('@loopbeats/audio-client', () => ({
     play = host.play;
     switchInput = host.switchInput;
     stopTransport = host.stopTransport;
+    startTracks = host.startTracks;
     stop = vi.fn();
     setMasterGain = vi.fn();
     setTrackGain = vi.fn();
@@ -243,7 +245,7 @@ test('Global STOP does nothing when all tracks are empty even with a retained ru
     },
   };
   render(<App />);
-  const stop = screen.getByRole('button', { name: 'Global STOP' });
+  const stop = screen.getByRole('button', { name: 'Global Start' });
   expect(stop).toBeDisabled();
   fireEvent.click(stop);
   expect(host.stopTransport).not.toHaveBeenCalled();
@@ -252,7 +254,7 @@ test('Global STOP does nothing when all tracks are empty even with a retained ru
   ).toBeEnabled();
 });
 
-test('Global STOP does nothing when all retained tracks are stopped', () => {
+test('Global Start starts retained tracks without predicting engine state', () => {
   host.snapshot = {
     ...host.snapshot,
     transport: {
@@ -276,10 +278,12 @@ test('Global STOP does nothing when all retained tracks are stopped', () => {
     ],
   };
   render(<App />);
-  const stop = screen.getByRole('button', { name: 'Global STOP' });
-  expect(stop).toBeDisabled();
-  fireEvent.click(stop);
+  const start = screen.getByRole('button', { name: 'Global Start' });
+  expect(start).toBeEnabled();
+  fireEvent.click(start);
+  expect(host.startTracks).toHaveBeenCalledOnce();
   expect(host.stopTransport).not.toHaveBeenCalled();
+  expect(screen.getAllByTestId('track-state')[0]).toHaveTextContent('Stopped');
 });
 
 test.each(['Loop', 'OneShot'] as const)(
