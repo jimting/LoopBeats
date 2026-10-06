@@ -82,6 +82,7 @@ select,
 summary {
   font: inherit;
   min-height: 44px;
+  min-width: 44px;
 }
 button {
   padding: 10px 14px;
@@ -92,18 +93,24 @@ button {
   cursor: pointer;
   font-size: 12px;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled):not([aria-pressed='true']) {
   background: #425369;
 }
 button:disabled,
 select:disabled,
 input:disabled {
-  opacity: 0.55;
+  opacity: 1;
   cursor: default;
+}
+button:disabled,
+select:disabled {
+  color: #aab8c8;
+  background: #20252c;
 }
 button[aria-pressed='true'] {
   background: #b9dfcd;
   color: #101215;
+  border-color: #677587;
 }
 :focus-visible {
   outline: 3px solid #a7dbff;
@@ -245,6 +252,8 @@ progress {
 }
 .track-buttons {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
 }
 .mute-state,
@@ -298,12 +307,13 @@ summary {
 }
 .diagnostics {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
   gap: 8px;
 }
 .diagnostics dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 [role='alert'] {
   color: #ffd18b;
@@ -313,7 +323,9 @@ dialog {
   background: #20252c;
   border: 1px solid #91a2b9;
   border-radius: 12px;
-  max-width: 480px;
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow: auto;
   padding: 24px;
 }
 dialog::backdrop {
@@ -322,12 +334,16 @@ dialog::backdrop {
 dialog button {
   margin: 8px 8px 0 0;
 }
+dialog :focus {
+  outline: 3px solid #a7dbff;
+  outline-offset: 4px;
+}
 @media (max-width: 900px) {
   .master-strip {
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   }
 }
-@media (max-width: 620px) {
+@media (max-width: 700px) {
   .shell {
     padding: 12px;
   }
@@ -345,7 +361,17 @@ dialog button {
     padding: 12px;
   }
   .track-performance {
+    grid-template-columns: 64px minmax(0, 1fr);
     gap: 12px;
+  }
+  .mode-control {
+    flex-wrap: wrap;
+  }
+  .session-tools section > label {
+    flex-wrap: wrap;
+  }
+  select {
+    max-width: 100%;
   }
 }
 @media (prefers-reduced-motion: reduce) {
