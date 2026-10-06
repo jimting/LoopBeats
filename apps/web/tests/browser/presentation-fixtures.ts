@@ -1,6 +1,13 @@
 import { expect, type Page } from '@playwright/test';
 import type { TrackSnapshot } from '@loopbeats/domain';
 
+export const visualViewports = [
+  { name: 'desktop', width: 1280, height: 800 },
+  { name: 'tablet', width: 768, height: 1024 },
+  { name: 'narrow', width: 390, height: 844 },
+  { name: 'compact', width: 320, height: 844 },
+] as const;
+
 export const trackFixture = (
   state: TrackSnapshot['state'],
   muted = false,

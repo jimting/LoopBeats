@@ -20,6 +20,10 @@ Production-capable target: five tracks; record/play/stop/overdub/clear; track ga
 
 Later: undo/redo, effects, quantization, BPM detection/tap tempo/metronome, loop import/export, local session save/load, MIDI/controllers, PWA/offline and native wrappers. Settings persistence and full session persistence are different scopes.
 
+The [future session import/export note](architecture/future-session-import-export.md)
+records the requested portable session files and separate WAV exports. It is
+planning input for a later specification, outside the current interface tickets.
+
 MVP excludes cloud accounts, social features, remote collaboration, server audio, AI generation, full DAW editing, arbitrary waveform editing, MIDI sequencing, plugin/VST/AU hosting and mastering tools. Validate reliable browser looping first.
 
 ## Target architecture
