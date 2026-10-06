@@ -124,10 +124,10 @@ input[type='range'] {
   min-height: 44px;
 }
 input[type='checkbox'] {
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
   vertical-align: middle;
-  margin: 10px;
+  margin: 4px;
 }
 .level-meters {
   display: grid;
@@ -282,6 +282,19 @@ summary {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+}
+.session-tools section > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.destructive-controls {
+  border-top: 1px solid #91a2b9;
+  margin-top: 16px;
+  padding: 12px 0;
+}
+.destructive-controls button {
+  border-color: #ff8b91;
 }
 .diagnostics {
   display: grid;

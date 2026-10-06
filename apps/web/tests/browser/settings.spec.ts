@@ -14,7 +14,8 @@ test('restores persisted settings when a new audio session starts', async ({
 }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.evaluate(() =>
     localStorage.setItem(
@@ -32,11 +33,26 @@ test('restores persisted settings when a new audio session starts', async ({
   );
   await page.reload();
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await expect(
     page.getByRole('checkbox', { name: 'Confirm before clearing' }),
   ).not.toBeChecked();
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('status')).toContainText('Audio ready');
+  await expect(page.getByRole('slider', { name: 'Master volume' })).toHaveValue(
+    '0.4',
+  );
+  await expect(
+    page.getByRole('slider', { name: 'Track 1 volume' }),
+  ).toHaveValue('0.25');
+  await expect(page.getByRole('button', { name: 'Unmute' })).toBeVisible();
+  await expect(
+    page.getByRole('combobox', { name: 'Track 2 playback mode' }),
+  ).toHaveValue('OneShot');
+  await page.getByRole('button', { name: 'Stop audio' }).click();
+  await expect(page.getByRole('status')).toContainText('Audio stopped');
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   await expect(page.getByRole('slider', { name: 'Master volume' })).toHaveValue(
@@ -53,7 +69,8 @@ test('persists confirmation from a fresh page before audio starts', async ({
 }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   const confirmation = page.getByRole('checkbox', {
     name: 'Confirm before clearing',
@@ -61,7 +78,8 @@ test('persists confirmation from a fresh page before audio starts', async ({
   await confirmation.uncheck();
   await page.reload();
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await expect(confirmation).not.toBeChecked();
 });
@@ -71,12 +89,14 @@ test('restores settings after stopping and starting audio again', async ({
 }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
@@ -99,7 +119,8 @@ test('restores settings after stopping and starting audio again', async ({
 test('beforeunload is canceled while a recording exists', async ({ page }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');

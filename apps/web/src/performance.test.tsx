@@ -165,7 +165,7 @@ test('a pending input switch gates the combined action until switching completes
       }),
   );
   render(<App />);
-  fireEvent.click(screen.getByText('Session controls and diagnostics'));
+  fireEvent.click(screen.getByText('Settings', { selector: 'summary' }));
   const selector = await screen.findByRole('combobox', { name: 'Audio input' });
   fireEvent.change(selector, { target: { value: 'usb' } });
   const button = screen.getByRole('button', {
@@ -233,6 +233,29 @@ test('first capture shows elapsed capacity rather than an invented repeating cyc
   const progress = screen.getAllByRole('progressbar')[0];
   expect(progress).toHaveAttribute('max', '2880000');
   expect(progress).toHaveAttribute('value', '24000');
+});
+
+test('settings remain available before startup and diagnostics are disclosed separately', () => {
+  host.snapshot = { ...host.snapshot, status: 'idle' };
+  render(<App />);
+  fireEvent.click(screen.getByText('Settings', { selector: 'summary' }));
+  const settings = within(screen.getByRole('region', { name: 'Settings' }));
+  const preference = settings.getByRole('checkbox', {
+    name: 'Confirm before clearing',
+  });
+  expect(preference).toBeEnabled();
+  fireEvent.click(preference);
+  expect(
+    JSON.parse(localStorage.getItem('loopbeats.settings.v1')!).confirmClearing,
+  ).toBe(false);
+  expect(
+    settings.getByText(/Preferences do not save recordings/),
+  ).toBeVisible();
+  expect(screen.queryByText('Sample rate')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText('Diagnostics', { exact: true }));
+  expect(
+    screen.getByText('Start audio to see live diagnostics.'),
+  ).toBeVisible();
 });
 
 test('Global STOP does nothing when all tracks are empty even with a retained running cycle', () => {

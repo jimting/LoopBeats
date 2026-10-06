@@ -15,7 +15,8 @@ test('CLEAR confirmation keeps audio running, cancel retains it, and reset remov
 }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByText('Track 1 details', { exact: true }).click();
   await page.getByRole('button', { name: 'Start audio' }).click();
@@ -36,6 +37,7 @@ test('CLEAR confirmation keeps audio running, cancel retains it, and reset remov
   await track.getByRole('button', { name: 'CLEAR', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Clear Track 1?' });
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
   const position = Number(
     await page.getByTestId('transport-position').textContent(),
   );
@@ -47,13 +49,25 @@ test('CLEAR confirmation keeps audio running, cancel retains it, and reset remov
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).not.toBeVisible();
+  await expect(
+    track.getByRole('button', { name: 'CLEAR', exact: true }),
+  ).toBeFocused();
   await expect(track.getByTestId('loop-length')).toHaveText(length!);
+  await track.getByRole('button', { name: 'CLEAR', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    track.getByRole('button', { name: 'CLEAR', exact: true }),
+  ).toBeFocused();
   await track.getByRole('button', { name: 'CLEAR', exact: true }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Confirm' })
     .click();
   await expect(track.getByTestId('track-state')).toHaveText('Empty');
+  await expect(
+    track.locator('summary').filter({ hasText: /^Track 1 details$/ }),
+  ).toBeFocused();
   await expect(page.getByTestId('cycle-length')).toHaveText(length!);
   await page.getByRole('button', { name: 'Enable monitoring' }).click();
   await page
@@ -75,7 +89,8 @@ test('confirmation can be disabled and reenabled, and cleared One-shot can recor
 }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByText('Track 1 details', { exact: true }).click();
   await page.getByRole('button', { name: 'Start audio' }).click();
@@ -119,7 +134,8 @@ test('actual worklet CLEAR keeps other audio and cycle while reset silences and 
 }) => {
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByText('Track 1 details', { exact: true }).click();
   const result = await page.evaluate(async () => {
