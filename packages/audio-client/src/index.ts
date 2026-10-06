@@ -537,6 +537,9 @@ export class AudioClient {
   stopTransport(): void {
     this.command({ type: 'stop-transport' });
   }
+  startTracks(): void {
+    this.command({ type: 'start-tracks' });
+  }
   async stop(): Promise<void> {
     const attempt = ++this.attempt;
     const session = this.session;

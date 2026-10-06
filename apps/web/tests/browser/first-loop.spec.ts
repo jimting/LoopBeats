@@ -17,7 +17,7 @@ test('records and plays a first Loop through the real worklet with monitoring of
     name: 'Track 1 · Loop',
     exact: true,
   });
-  const rec = track.getByRole('button', { name: 'REC', exact: true });
+  const rec = track.getByRole('button', { name: /REC\/PLAY/ });
   await expect(rec).toBeDisabled();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');

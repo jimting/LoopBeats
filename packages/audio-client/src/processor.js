@@ -90,6 +90,28 @@ class LoopProcessor extends AudioWorkletProcessor {
           case 'stop-transport':
             this.engine.stop_transport();
             break;
+          case 'start-tracks': {
+            // One message starts retained tracks before the next processing block.
+            // Ignore stale starts while any track is active; never retrigger playback.
+            const active = (trackId) => {
+              const state = this.engine.track_state(trackId);
+              return (
+                state === TRACK_STATE.Recording ||
+                state === TRACK_STATE.Playing ||
+                state === TRACK_STATE.Overdubbing
+              );
+            };
+            if (!active(0) && !active(1)) {
+              for (let trackId = 0; trackId < 2; trackId++) {
+                if (
+                  this.engine.track_state(trackId) === TRACK_STATE.Stopped &&
+                  this.engine.can_play(trackId)
+                )
+                  this.engine.play(trackId);
+              }
+            }
+            break;
+          }
         }
       }
       this.port.postMessage({

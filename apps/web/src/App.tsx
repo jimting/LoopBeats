@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
+import { TrackStrip } from './TrackStrip';
 
 type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
 type InputDevice = { id: string; label: string };
@@ -181,6 +182,12 @@ export function App() {
     else remove(target);
   };
   const ready = snapshot.status === 'ready';
+  const tracksActive = snapshot.tracks.some((track) =>
+    ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
+  );
+  const tracksPlayable = snapshot.tracks.some(
+    (track) => track.state === 'Stopped' && track.canPlay,
+  );
   const starting =
     snapshot.status === 'starting' || snapshot.status === 'recovering';
   const status = {
@@ -194,178 +201,235 @@ export function App() {
   }[snapshot.status];
   return (
     <main className="shell">
-      <p className="eyebrow">Your browser loopstation</p>
-      <h1>LoopBeats</h1>
-      <p className="intro">Build a performance, one layer at a time.</p>
-      <section className="notice" aria-labelledby="status-heading">
-        <h2 id="status-heading">Audio session</h2>
-        <p role="status">{status}</p>
-        {snapshot.error && <p role="alert">{snapshot.error}</p>}
-        <p>Use wired headphones. Monitoring starts off in every new session.</p>
-        <p>
-          Recordings are temporary and remain in memory only. The browser may
-          not always show or honor a leave-page warning, so save anything you
-          need before closing or reloading.
-        </p>
-        <div className="controls">
-          <button
-            disabled={
-              ready ||
-              starting ||
-              snapshot.status === 'stopping' ||
-              snapshot.status === 'interrupted'
-            }
-            onClick={() => {
-              void client.start(preferredInputId || undefined);
-            }}
-          >
-            Start audio
-          </button>
-          <button
-            disabled={!ready && !starting && snapshot.status !== 'interrupted'}
-            onClick={() => {
-              void client.stop();
-            }}
-          >
-            {snapshot.status === 'recovering'
-              ? 'Cancel recovery and discard session'
-              : starting
-                ? 'Cancel audio startup'
-                : 'Stop audio'}
-          </button>
-          {(snapshot.status === 'interrupted' ||
-            snapshot.status === 'recovering') && (
-            <button
-              disabled={snapshot.status !== 'interrupted'}
-              onClick={() => {
-                void client.reinitialize();
-              }}
-            >
-              Reinitialize audio
-            </button>
-          )}
-          <button
-            disabled={!ready || switchPending}
-            aria-pressed={snapshot.monitoring}
-            onClick={() => client.setMonitoring(!snapshot.monitoring)}
-          >
-            {snapshot.monitoring ? 'Disable monitoring' : 'Enable monitoring'}
-          </button>
+      <header className="brand-header">
+        <div>
+          <p className="eyebrow">Two-track performance station</p>
+          <h1>LoopBeats</h1>
         </div>
-        <p>{snapshot.monitoring ? 'Monitoring on' : 'Monitoring off'}</p>
-        {ready && inputDevices.length > 0 && (
-          <label>
-            Audio input
-            <select
-              aria-label="Audio input"
-              value={snapshot.inputDeviceId ?? ''}
-              disabled={
-                switchPending ||
-                snapshot.transport.running ||
-                snapshot.tracks.some((track) =>
-                  ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
-                )
+        <p className="intro">Build a performance, one layer at a time.</p>
+      </header>
+      <section className="instrument" aria-labelledby="status-heading">
+        <div className="master-strip">
+          <div className="session-status">
+            <h2 id="status-heading">Audio session</h2>
+            <p role="status">{status}</p>
+            {snapshot.error && <p role="alert">{snapshot.error}</p>}
+            <p className="session-guidance">
+              Use wired headphones. Monitoring starts off.
+            </p>
+            <p className="session-guidance">
+              Temporary audio only. Leaving may lose it; browser warnings and
+              recovery are not guaranteed.
+            </p>
+            <div className="controls">
+              <button
+                disabled={
+                  ready ||
+                  starting ||
+                  snapshot.status === 'stopping' ||
+                  snapshot.status === 'interrupted'
+                }
+                onClick={() => {
+                  void client.start(preferredInputId || undefined);
+                }}
+              >
+                Start audio
+              </button>
+              <button
+                disabled={
+                  !ready && !starting && snapshot.status !== 'interrupted'
+                }
+                onClick={() => {
+                  void client.stop();
+                }}
+              >
+                {snapshot.status === 'recovering'
+                  ? 'Cancel recovery and discard session'
+                  : starting
+                    ? 'Cancel audio startup'
+                    : 'Stop audio — discard session'}
+              </button>
+              {(snapshot.status === 'interrupted' ||
+                snapshot.status === 'recovering') && (
+                <button
+                  disabled={snapshot.status !== 'interrupted'}
+                  onClick={() => {
+                    void client.reinitialize();
+                  }}
+                >
+                  Reinitialize audio
+                </button>
+              )}
+              <button
+                disabled={!ready || switchPending}
+                aria-pressed={snapshot.monitoring}
+                onClick={() => client.setMonitoring(!snapshot.monitoring)}
+              >
+                {snapshot.monitoring
+                  ? 'Disable monitoring'
+                  : 'Enable monitoring'}
+              </button>
+            </div>
+            <p>{snapshot.monitoring ? 'Monitoring on' : 'Monitoring off'}</p>
+          </div>
+          <div className="level-meters">
+            <label>
+              Input{' '}
+              <meter
+                min="0"
+                max="1"
+                value={snapshot.inputLevel}
+                aria-label="Input level"
+              />
+            </label>
+            <span data-testid="input-level">
+              {snapshot.inputLevel.toFixed(3)}
+            </span>
+            <label>
+              Output{' '}
+              <meter
+                min="0"
+                max="1"
+                value={snapshot.outputLevel}
+                aria-label="Output level"
+              />
+            </label>
+            <span data-testid="output-level">
+              {snapshot.outputLevel.toFixed(3)}
+            </span>
+          </div>
+          <label className="master-gain">
+            Master volume
+            <input
+              type="range"
+              aria-label="Master volume"
+              min="0"
+              max="1"
+              step="0.01"
+              value={snapshot.masterGain}
+              disabled={!ready || switchPending}
+              onChange={(event) =>
+                client.setMasterGain(Number(event.currentTarget.value))
               }
-              onChange={(event) => {
-                const deviceId = event.currentTarget.value;
-                setSwitchPending(true);
-                void client.switchInput(deviceId).then((switched) => {
-                  if (switched) {
-                    setPreferredInputId(deviceId);
-                    const current = readSettings() ?? defaultSettings();
-                    writeSettings({ ...current, preferredInputId: deviceId });
-                    void loadInputDevices().then(setInputDevices);
-                  }
-                  setSwitchPending(false);
-                });
+            />
+            <span>{Math.round(snapshot.masterGain * 100)}%</span>
+          </label>
+          <section aria-labelledby="transport-heading">
+            <h2 id="transport-heading">Transport</h2>
+            <p data-testid="transport-state">
+              {snapshot.transport.running ? 'Running' : 'Stopped'}
+            </p>
+            <button
+              disabled={
+                switchPending || !ready || (!tracksActive && !tracksPlayable)
+              }
+              onClick={() => {
+                if (!ready || switchPending) return;
+                if (tracksActive) client.stopTransport();
+                else if (tracksPlayable) client.startTracks();
               }}
             >
-              <option value="">System default</option>
-              {inputDevices.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {device.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {ready && (
-          <p>
-            Stop playback and capture before changing inputs. Completed
-            recordings are retained and the shared transport is reset.
-          </p>
-        )}
-        {ready &&
-          preferredInputId &&
-          snapshot.inputDeviceId !== preferredInputId && (
-            <p role="status">
-              Preferred input is unavailable; using the system-selected input.
+              {tracksActive ? 'Global STOP' : 'Global Start'}
+            </button>
+          </section>
+        </div>
+        <div className="track-bank">
+          {snapshot.tracks.map((track, index) => (
+            <TrackStrip
+              key={index}
+              track={track}
+              trackId={index as TrackId}
+              sampleRate={snapshot.sampleRate}
+              cycleLengthSamples={snapshot.transport.cycleLengthSamples}
+              enabled={ready && !switchPending}
+              client={client}
+              onClear={() =>
+                requestRemoval({ kind: 'track', trackId: index as TrackId })
+              }
+            />
+          ))}
+        </div>
+        <details className="session-tools">
+          <summary>Session controls and diagnostics</summary>
+          {ready && inputDevices.length > 0 && (
+            <label>
+              Audio input
+              <select
+                aria-label="Audio input"
+                value={snapshot.inputDeviceId ?? ''}
+                disabled={
+                  switchPending ||
+                  snapshot.transport.running ||
+                  snapshot.tracks.some((track) =>
+                    ['Recording', 'Playing', 'Overdubbing'].includes(
+                      track.state,
+                    ),
+                  )
+                }
+                onChange={(event) => {
+                  const deviceId = event.currentTarget.value;
+                  setSwitchPending(true);
+                  void client.switchInput(deviceId).then((switched) => {
+                    if (switched) {
+                      setPreferredInputId(deviceId);
+                      const current = readSettings() ?? defaultSettings();
+                      writeSettings({ ...current, preferredInputId: deviceId });
+                      void loadInputDevices().then(setInputDevices);
+                    }
+                    setSwitchPending(false);
+                  });
+                }}
+              >
+                <option value="">System default</option>
+                {inputDevices.map((device) => (
+                  <option key={device.id} value={device.id}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {ready && (
+            <p>
+              Stop playback and capture before changing inputs. Completed
+              recordings are retained and the shared transport is reset.
             </p>
           )}
-        {ready && (
-          <dl className="diagnostics">
-            <dt>Sample rate</dt>
-            <dd>{snapshot.sampleRate} Hz</dd>
-            <dt>Processed frames</dt>
-            <dd>{snapshot.processedFrames}</dd>
-            <dt>Input level</dt>
-            <dd data-testid="input-level">{snapshot.inputLevel.toFixed(3)}</dd>
-            <dt>Output level</dt>
-            <dd data-testid="output-level">
-              {snapshot.outputLevel.toFixed(3)}
-            </dd>
-          </dl>
-        )}
-        <label>
-          <input
-            type="checkbox"
-            checked={confirmClearing}
-            onChange={(event) => {
-              const enabled = event.currentTarget.checked;
-              setConfirmClearing(enabled);
-              writeSettings({
-                ...(readSettings() ?? defaultSettings()),
-                confirmClearing: enabled,
-              });
-            }}
-          />
-          Confirm before clearing
-        </label>
-        <p>This confirmation preference is saved in this browser.</p>
-        <label>
-          Master volume
-          <input
-            type="range"
-            aria-label="Master volume"
-            min="0"
-            max="1"
-            step="0.01"
-            value={snapshot.masterGain}
-            disabled={!ready || switchPending}
-            onChange={(event) =>
-              client.setMasterGain(Number(event.currentTarget.value))
-            }
-          />
-          <span>{Math.round(snapshot.masterGain * 100)}%</span>
-        </label>
-        <section aria-labelledby="transport-heading">
-          <h2 id="transport-heading">Transport</h2>
-          <p data-testid="transport-state">
-            {snapshot.transport.running ? 'Running' : 'Stopped'}
-          </p>
-          <button
-            disabled={
-              switchPending ||
-              !ready ||
-              (!snapshot.transport.running &&
-                !snapshot.tracks.some((track) =>
-                  ['Recording', 'Playing', 'Overdubbing'].includes(track.state),
-                ))
-            }
-            onClick={() => client.stopTransport()}
-          >
-            Global STOP
-          </button>
+          {ready &&
+            preferredInputId &&
+            snapshot.inputDeviceId !== preferredInputId && (
+              <p role="status">
+                Preferred input is unavailable; using the system-selected input.
+              </p>
+            )}
+          <label>
+            <input
+              type="checkbox"
+              checked={confirmClearing}
+              onChange={(event) => {
+                const enabled = event.currentTarget.checked;
+                setConfirmClearing(enabled);
+                writeSettings({
+                  ...(readSettings() ?? defaultSettings()),
+                  confirmClearing: enabled,
+                });
+              }}
+            />
+            Confirm before clearing
+          </label>
+          <p>This confirmation preference is saved in this browser.</p>
+          {ready && (
+            <dl className="diagnostics">
+              <dt>Sample rate</dt>
+              <dd>{snapshot.sampleRate} Hz</dd>
+              <dt>Processed frames</dt>
+              <dd>{snapshot.processedFrames}</dd>
+              <dt>Input level</dt>
+              <dd>{snapshot.inputLevel.toFixed(3)}</dd>
+              <dt>Output level</dt>
+              <dd>{snapshot.outputLevel.toFixed(3)}</dd>
+            </dl>
+          )}
           <button
             disabled={
               switchPending ||
@@ -393,152 +457,7 @@ export function App() {
             Global STOP resets the timeline and retains completed audio;
             unfinished first capture is discarded. Monitoring is independent.
           </p>
-        </section>
-        {snapshot.tracks.map((track, index) => {
-          const trackId = index as TrackId;
-          const independentCapture =
-            track.mode === 'OneShot' ||
-            snapshot.transport.cycleLengthSamples === 0;
-          const modeLabel = track.mode === 'OneShot' ? 'One-shot' : 'Loop';
-          return (
-            <section key={trackId} aria-labelledby={`track-heading-${trackId}`}>
-              <h2 id={`track-heading-${trackId}`}>
-                Track {index + 1} · {modeLabel}
-              </h2>
-              <label>
-                Playback mode
-                <select
-                  aria-label={`Track ${index + 1} playback mode`}
-                  value={track.mode}
-                  disabled={switchPending || !ready || !track.canSetMode}
-                  onChange={(event) =>
-                    client.setMode(
-                      trackId,
-                      event.currentTarget.value === 'OneShot'
-                        ? 'OneShot'
-                        : 'Loop',
-                    )
-                  }
-                >
-                  <option value="Loop" disabled={!track.canSetLoop}>
-                    Loop
-                  </option>
-                  <option value="OneShot">One-shot</option>
-                </select>
-              </label>
-              {track.state === 'Stopped' && !track.canSetLoop && (
-                <p>
-                  Loop mode requires the recording to match the shared cycle
-                  length exactly.
-                </p>
-              )}
-              <label>
-                Track volume
-                <input
-                  type="range"
-                  aria-label={`Track ${index + 1} volume`}
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={track.gain}
-                  disabled={!ready || switchPending}
-                  onChange={(event) =>
-                    client.setTrackGain(
-                      trackId,
-                      Number(event.currentTarget.value),
-                    )
-                  }
-                />
-                <span>{Math.round(track.gain * 100)}%</span>
-              </label>
-              <button
-                disabled={!ready || switchPending}
-                aria-pressed={track.muted}
-                onClick={() => client.setTrackMute(trackId, !track.muted)}
-              >
-                {track.muted ? 'Unmute' : 'Mute'}
-              </button>
-              <p data-testid="track-state">{track.state}</p>
-              <button
-                disabled={switchPending || !ready || !track.canRecord}
-                onClick={() => client.record(trackId)}
-              >
-                REC
-              </button>
-              <button
-                disabled={switchPending || !ready || !track.canPlay}
-                onClick={() => client.play(trackId)}
-              >
-                PLAY
-              </button>
-              <button
-                disabled={switchPending || !ready || !track.canStop}
-                onClick={() => client.stopTrack(trackId)}
-              >
-                Track STOP
-              </button>
-              <button
-                disabled={switchPending || !ready || track.state === 'Empty'}
-                onClick={() => requestRemoval({ kind: 'track', trackId })}
-              >
-                CLEAR
-              </button>
-              <p>
-                {track.state === 'Overdubbing'
-                  ? 'REC ends overdub and keeps playing; Track STOP retains additions.'
-                  : track.state === 'Recording'
-                    ? track.mode === 'OneShot'
-                      ? 'REC finishes and plays once; Track STOP retains audio silently.'
-                      : 'REC finishes and loops; Track STOP retains audio silently.'
-                    : track.state === 'Empty'
-                      ? independentCapture
-                        ? 'Press REC to capture up to 60 seconds.'
-                        : 'REC captures one full cycle from the current phase; finish early to leave silence elsewhere.'
-                      : track.mode === 'OneShot'
-                        ? 'PLAY retriggers from the beginning once. REC requires CLEAR first; no One-shot overdub.'
-                        : 'REC starts overdub immediately while transport runs; PLAY joins the shared cycle; Track STOP retains audio.'}
-              </p>
-              <p>
-                {independentCapture
-                  ? 'Recording limit: 60 seconds.'
-                  : 'Recording limit: one shared cycle.'}{' '}
-                Remaining:{' '}
-                <span data-testid="capture-remaining">
-                  {snapshot.sampleRate
-                    ? (
-                        Math.max(
-                          0,
-                          track.captureLimitSamples - track.capturedSamples,
-                        ) / snapshot.sampleRate
-                      ).toFixed(1)
-                    : '60.0'}{' '}
-                  s
-                </span>
-              </p>
-              <p>
-                Captured samples:{' '}
-                <span data-testid="captured-samples">
-                  {track.capturedSamples}
-                </span>
-              </p>
-              <p>
-                Loop samples:{' '}
-                <span data-testid="loop-length">{track.lengthSamples}</span>
-              </p>
-              <progress
-                aria-label={`${modeLabel} progress`}
-                max={track.lengthSamples || 1}
-                value={track.positionSamples}
-              />
-              <p>
-                Stop audio closes the session and discards its recordings. Track
-                STOP retains audio. Change playback mode while stopped; Loop
-                requires matching the shared cycle length. CLEAR preserves the
-                cycle; Reset session removes it.
-              </p>
-            </section>
-          );
-        })}
+        </details>
       </section>
       {pendingRemoval && (
         <dialog

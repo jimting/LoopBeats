@@ -22,7 +22,7 @@ test('REC controls immediate overdub and capture exclusion through the productio
     name: 'Track 2 · Loop',
     exact: true,
   });
-  const rec = first.getByRole('button', { name: 'REC', exact: true });
+  const rec = first.getByRole('button', { name: /REC\/PLAY/ });
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   await rec.click();
@@ -34,24 +34,24 @@ test('REC controls immediate overdub and capture exclusion through the productio
   await expect(first.getByTestId('track-state')).toHaveText('Overdubbing');
   await expect(rec).toBeEnabled();
   await expect(
-    second.getByRole('button', { name: 'REC', exact: true }),
+    second.getByRole('button', { name: /REC\/PLAY/ }),
   ).toBeDisabled();
   await expect(page.getByTestId('output-level')).not.toHaveText('0.000');
   await rec.click();
   await expect(first.getByTestId('track-state')).toHaveText('Playing');
-  await expect(
-    second.getByRole('button', { name: 'REC', exact: true }),
-  ).toBeEnabled();
+  await expect(second.getByRole('button', { name: /REC\/PLAY/ })).toBeEnabled();
   await first.getByRole('button', { name: 'Track STOP', exact: true }).click();
   await expect(first.getByTestId('track-state')).toHaveText('Stopped');
+  await rec.click();
+  await expect(first.getByTestId('track-state')).toHaveText('Playing');
   await rec.click();
   await expect(first.getByTestId('track-state')).toHaveText('Overdubbing');
   await page.getByRole('button', { name: 'Global STOP' }).click();
   await expect(first.getByTestId('track-state')).toHaveText('Stopped');
   await expect(first.getByTestId('loop-length')).toHaveText(length!);
-  await expect(rec).toBeDisabled();
+  await expect(rec).toBeEnabled();
   await expect(page.getByTestId('transport-position')).toHaveText('0');
-  await first.getByRole('button', { name: 'PLAY', exact: true }).click();
+  await first.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(page.getByTestId('output-level')).not.toHaveText('0.000');
 });
 

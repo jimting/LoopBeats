@@ -13,6 +13,9 @@ test('restores persisted settings when a new audio session starts', async ({
   page,
 }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.evaluate(() =>
     localStorage.setItem(
       'loopbeats.settings.v1',
@@ -28,6 +31,9 @@ test('restores persisted settings when a new audio session starts', async ({
     ),
   );
   await page.reload();
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await expect(
     page.getByRole('checkbox', { name: 'Confirm before clearing' }),
   ).not.toBeChecked();
@@ -46,11 +52,17 @@ test('persists confirmation from a fresh page before audio starts', async ({
   page,
 }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   const confirmation = page.getByRole('checkbox', {
     name: 'Confirm before clearing',
   });
   await confirmation.uncheck();
   await page.reload();
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await expect(confirmation).not.toBeChecked();
 });
 
@@ -58,8 +70,14 @@ test('restores settings after stopping and starting audio again', async ({
   page,
 }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   await page
@@ -80,10 +98,13 @@ test('restores settings after stopping and starting audio again', async ({
 
 test('beforeunload is canceled while a recording exists', async ({ page }) => {
   await page.goto('/');
+  await page
+    .getByText('Session controls and diagnostics', { exact: true })
+    .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
   const track = page.getByRole('region', { name: /Track 1/ }).first();
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),

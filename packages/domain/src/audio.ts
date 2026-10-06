@@ -53,6 +53,7 @@ export type AudioCommand =
   | { type: 'play'; trackId: TrackId }
   | { type: 'stop-track'; trackId: TrackId }
   | { type: 'stop-transport' }
+  | { type: 'start-tracks' }
   | { type: 'clear'; trackId: TrackId }
   | { type: 'reset' }
   | { type: 'interrupt' };

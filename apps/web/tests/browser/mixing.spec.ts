@@ -36,13 +36,13 @@ test('volume and mute controls acknowledge engine values while recording and pla
   await expect(
     track.getByRole('button', { name: 'Unmute', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect
     .poll(async () =>
       Number(await track.getByTestId('captured-samples').textContent()),
     )
     .toBeGreaterThanOrEqual(24000);
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await expect(page.getByTestId('output-level')).toHaveText('0.000');
   const position = Number(
@@ -53,7 +53,7 @@ test('volume and mute controls acknowledge engine values while recording and pla
       Number(await page.getByTestId('transport-position').textContent()),
     )
     .toBeGreaterThan(position);
-  await track.getByRole('button', { name: 'REC', exact: true }).click();
+  await track.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Overdubbing');
   await track.getByRole('button', { name: 'Unmute', exact: true }).click();
   await expect(

@@ -14,7 +14,7 @@ test('the production application opens without runtime errors', async ({
     await expect(
       page
         .getByRole('region', { name })
-        .getByRole('button', { name: 'REC', exact: true }),
+        .getByRole('button', { name: /REC\/PLAY/ }),
     ).toBeDisabled();
   }
   expect(errors).toEqual([]);
