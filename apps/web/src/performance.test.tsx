@@ -230,3 +230,62 @@ test('first capture shows elapsed capacity rather than an invented repeating cyc
   expect(progress).toHaveAttribute('max', '2880000');
   expect(progress).toHaveAttribute('value', '24000');
 });
+
+test.each(['Loop', 'OneShot'] as const)(
+  '%s capture uses shared phase only for synchronized Loop recording',
+  (mode) => {
+    host.snapshot = {
+      ...host.snapshot,
+      transport: {
+        running: true,
+        positionSamples: 120000,
+        cycleLengthSamples: 192000,
+      },
+      tracks: [
+        {
+          ...host.snapshot.tracks[0],
+          state: 'Playing',
+          lengthSamples: 192000,
+          positionSamples: 120000,
+        },
+        {
+          ...host.snapshot.tracks[1],
+          mode,
+          state: 'Recording',
+          capturedSamples: 24000,
+          captureLimitSamples: mode === 'Loop' ? 192000 : 2880000,
+          lengthSamples: mode === 'Loop' ? 192000 : 24000,
+          positionSamples: mode === 'Loop' ? 120000 : 0,
+        },
+      ],
+    };
+    render(<App />);
+    const progress = screen.getAllByRole('progressbar');
+    expect(progress[1]).toHaveAttribute(
+      'max',
+      mode === 'Loop' ? '192000' : '2880000',
+    );
+    expect(progress[1]).toHaveAttribute(
+      'value',
+      mode === 'Loop' ? '120000' : '24000',
+    );
+    act(() => {
+      host.snapshot = {
+        ...host.snapshot,
+        tracks: [
+          { ...host.snapshot.tracks[0], positionSamples: 12000 },
+          {
+            ...host.snapshot.tracks[1],
+            capturedSamples: 108000,
+            positionSamples: mode === 'Loop' ? 12000 : 0,
+          },
+        ],
+      };
+      host.listeners.forEach((listener) => listener());
+    });
+    expect(progress[1]).toHaveAttribute(
+      'value',
+      mode === 'Loop' ? '12000' : '108000',
+    );
+  },
+);

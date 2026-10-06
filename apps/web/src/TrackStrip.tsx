@@ -48,6 +48,8 @@ export function TrackStrip({
   const mode = track.mode === 'OneShot' ? 'One-shot' : 'Loop';
   const action = primaryAction(track);
   const recording = track.state === 'Recording';
+  const captureProgress =
+    recording && (track.mode === 'OneShot' || !cycleLengthSamples);
   const remaining = sampleRate
     ? (
         Math.max(0, track.captureLimitSamples - track.capturedSamples) /
@@ -114,11 +116,15 @@ export function TrackStrip({
           <progress
             aria-label={`${mode} progress`}
             max={
-              recording
+              captureProgress
                 ? track.captureLimitSamples || 1
-                : track.lengthSamples || 1
+                : (track.mode === 'Loop'
+                    ? cycleLengthSamples
+                    : track.lengthSamples) || 1
             }
-            value={recording ? track.capturedSamples : track.positionSamples}
+            value={
+              captureProgress ? track.capturedSamples : track.positionSamples
+            }
           />
           <button
             className="primary-action"
