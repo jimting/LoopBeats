@@ -57,7 +57,8 @@ test.beforeEach(async ({ page }) => {
   });
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
 });
 
@@ -98,7 +99,8 @@ test('successful selection retains Loop and cycle, saves preference, and restore
   await page.getByRole('button', { name: 'Stop audio' }).click();
   await page.reload();
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('combobox', { name: 'Audio input' })).toHaveValue(
@@ -117,7 +119,8 @@ test('unavailable persisted input falls back and displays actual device', async 
   await page.getByRole('button', { name: 'Stop audio' }).click();
   await page.reload();
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.evaluate(() => {
     (

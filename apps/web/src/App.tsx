@@ -83,8 +83,20 @@ export function App() {
   const [switchPending, setSwitchPending] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<Removal | null>(null);
   const confirmation = useRef<HTMLDialogElement>(null);
+  const removalTrigger = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (pendingRemoval) confirmation.current?.showModal();
+    if (!pendingRemoval) return;
+    const dialog = confirmation.current;
+    dialog?.showModal();
+    dialog?.querySelector<HTMLButtonElement>('button')?.focus();
+    return () => {
+      dialog?.close();
+      const trigger = removalTrigger.current;
+      if (!trigger?.isConnected) return;
+      trigger.focus();
+      if (document.activeElement !== trigger)
+        trigger.closest('details')?.querySelector('summary')?.focus();
+    };
   }, [pendingRemoval]);
   const [client] = useState(
     () =>
@@ -175,11 +187,18 @@ export function App() {
   const remove = (target: Removal) => {
     if (target.kind === 'track') client.clear(target.trackId);
     else client.reset();
+    // The confirmed action may disable its trigger when the engine replies.
+    // Return to the disclosure so focus survives that asynchronous update.
+    removalTrigger.current =
+      removalTrigger.current?.closest('details')?.querySelector('summary') ??
+      removalTrigger.current;
     setPendingRemoval(null);
   };
   const requestRemoval = (target: Removal) => {
-    if (confirmClearing) setPendingRemoval(target);
-    else remove(target);
+    if (confirmClearing) {
+      removalTrigger.current = document.activeElement as HTMLElement | null;
+      setPendingRemoval(target);
+    } else remove(target);
   };
   const ready = snapshot.status === 'ready';
   const tracksActive = snapshot.tracks.some((track) =>
@@ -218,8 +237,9 @@ export function App() {
               Use wired headphones. Monitoring starts off.
             </p>
             <p className="session-guidance">
-              Temporary audio only. Leaving may lose it; browser warnings and
-              recovery are not guaranteed.
+              Recordings are temporary. Preferences do not save recordings.
+              Browsers cannot guarantee prevention of page closure or recovery
+              of temporary audio.
             </p>
             <div className="controls">
               <button
@@ -350,75 +370,129 @@ export function App() {
           ))}
         </div>
         <details className="session-tools">
-          <summary>Session controls and diagnostics</summary>
-          {ready && inputDevices.length > 0 && (
-            <label>
-              Audio input
-              <select
-                aria-label="Audio input"
-                value={snapshot.inputDeviceId ?? ''}
-                disabled={
-                  switchPending ||
-                  snapshot.transport.running ||
-                  snapshot.tracks.some((track) =>
-                    ['Recording', 'Playing', 'Overdubbing'].includes(
-                      track.state,
-                    ),
-                  )
-                }
-                onChange={(event) => {
-                  const deviceId = event.currentTarget.value;
-                  setSwitchPending(true);
-                  void client.switchInput(deviceId).then((switched) => {
-                    if (switched) {
-                      setPreferredInputId(deviceId);
-                      const current = readSettings() ?? defaultSettings();
-                      writeSettings({ ...current, preferredInputId: deviceId });
-                      void loadInputDevices().then(setInputDevices);
-                    }
-                    setSwitchPending(false);
-                  });
-                }}
-              >
-                <option value="">System default</option>
-                {inputDevices.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {device.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {ready && (
-            <p>
-              Stop playback and capture before changing inputs. Completed
-              recordings are retained and the shared transport is reset.
-            </p>
-          )}
-          {ready &&
-            preferredInputId &&
-            snapshot.inputDeviceId !== preferredInputId && (
-              <p role="status">
-                Preferred input is unavailable; using the system-selected input.
+          <summary>Settings</summary>
+          <section aria-labelledby="settings-heading">
+            <h2 id="settings-heading">Settings</h2>
+            {ready && inputDevices.length > 0 && (
+              <label>
+                Audio input
+                <select
+                  aria-label="Audio input"
+                  value={snapshot.inputDeviceId ?? ''}
+                  disabled={
+                    switchPending ||
+                    snapshot.transport.running ||
+                    snapshot.tracks.some((track) =>
+                      ['Recording', 'Playing', 'Overdubbing'].includes(
+                        track.state,
+                      ),
+                    )
+                  }
+                  onChange={(event) => {
+                    const deviceId = event.currentTarget.value;
+                    setSwitchPending(true);
+                    void client.switchInput(deviceId).then((switched) => {
+                      if (switched) {
+                        setPreferredInputId(deviceId);
+                        const current = readSettings() ?? defaultSettings();
+                        writeSettings({
+                          ...current,
+                          preferredInputId: deviceId,
+                        });
+                        void loadInputDevices().then(setInputDevices);
+                      }
+                      setSwitchPending(false);
+                    });
+                  }}
+                >
+                  <option value="">System default</option>
+                  {inputDevices.map((device) => (
+                    <option key={device.id} value={device.id}>
+                      {device.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {ready && (
+              <p>
+                Stop playback and capture before changing inputs. Completed
+                recordings are retained and the shared transport is reset.
               </p>
             )}
-          <label>
-            <input
-              type="checkbox"
-              checked={confirmClearing}
-              onChange={(event) => {
-                const enabled = event.currentTarget.checked;
-                setConfirmClearing(enabled);
-                writeSettings({
-                  ...(readSettings() ?? defaultSettings()),
-                  confirmClearing: enabled,
-                });
-              }}
-            />
-            Confirm before clearing
-          </label>
-          <p>This confirmation preference is saved in this browser.</p>
-          {ready && (
+            {!ready && (
+              <p>
+                Start audio to select an input. Saved preferences are restored
+                when audio starts.
+              </p>
+            )}
+            {switchPending && (
+              <p role="status">
+                Changing audio input. Track controls are unavailable until
+                switching finishes.
+              </p>
+            )}
+            {ready && (
+              <p>
+                Current input:{' '}
+                {inputDevices.find(
+                  (device) => device.id === snapshot.inputDeviceId,
+                )?.label ?? 'System-selected input'}
+              </p>
+            )}
+            {ready &&
+              preferredInputId &&
+              snapshot.inputDeviceId !== preferredInputId && (
+                <p role="status">
+                  Preferred input is unavailable; using the system-selected
+                  input.
+                </p>
+              )}
+            <label>
+              <input
+                type="checkbox"
+                checked={confirmClearing}
+                onChange={(event) => {
+                  const enabled = event.currentTarget.checked;
+                  setConfirmClearing(enabled);
+                  writeSettings({
+                    ...(readSettings() ?? defaultSettings()),
+                    confirmClearing: enabled,
+                  });
+                }}
+              />
+              Confirm before clearing
+            </label>
+            <p>
+              Preferences do not save recordings. Input, confirmation and mix
+              preferences are saved in this browser.
+            </p>
+            <section
+              className="destructive-controls"
+              aria-labelledby="reset-heading"
+            >
+              <h2 id="reset-heading">Remove session recordings</h2>
+              <p>
+                Reset removes every recording and the shared cycle. Track CLEAR
+                removes only that recording.
+              </p>
+              <button
+                disabled={
+                  switchPending ||
+                  !ready ||
+                  (!snapshot.transport.cycleLengthSamples &&
+                    snapshot.tracks.every((track) => track.state === 'Empty'))
+                }
+                onClick={() => requestRemoval({ kind: 'session' })}
+              >
+                Reset session
+              </button>
+            </section>
+          </section>
+        </details>
+        <details className="session-tools">
+          <summary>Diagnostics</summary>
+          {ready ? (
             <dl className="diagnostics">
               <dt>Sample rate</dt>
               <dd>{snapshot.sampleRate} Hz</dd>
@@ -429,18 +503,9 @@ export function App() {
               <dt>Output level</dt>
               <dd>{snapshot.outputLevel.toFixed(3)}</dd>
             </dl>
+          ) : (
+            <p>Start audio to see live diagnostics.</p>
           )}
-          <button
-            disabled={
-              switchPending ||
-              !ready ||
-              (!snapshot.transport.cycleLengthSamples &&
-                snapshot.tracks.every((track) => track.state === 'Empty'))
-            }
-            onClick={() => requestRemoval({ kind: 'session' })}
-          >
-            Reset session
-          </button>
           <p>
             Timeline samples:{' '}
             <span data-testid="transport-position">
@@ -463,6 +528,7 @@ export function App() {
         <dialog
           ref={confirmation}
           aria-labelledby="removal-heading"
+          aria-describedby="removal-description"
           onCancel={() => setPendingRemoval(null)}
         >
           <h2 id="removal-heading">
@@ -470,7 +536,7 @@ export function App() {
               ? `Clear Track ${pendingRemoval.trackId + 1}?`
               : 'Reset session?'}
           </h2>
-          <p>
+          <p id="removal-description">
             {pendingRemoval.kind === 'track'
               ? 'Remove this recording. The shared cycle and other track remain.'
               : 'Remove all recordings and reset the shared cycle. Monitoring returns off.'}{' '}

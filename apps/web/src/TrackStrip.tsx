@@ -173,24 +173,29 @@ export function TrackStrip({
       </p>
       <details className="track-details">
         <summary>Track {number} details</summary>
-        <p>
-          Captured samples:{' '}
-          <span data-testid="captured-samples">{track.capturedSamples}</span>
-        </p>
-        <p>
-          Loop samples:{' '}
-          <span data-testid="loop-length">{track.lengthSamples}</span>
-        </p>
-        <p>
-          Track STOP retains audio. CLEAR preserves the shared cycle. One-shot
-          retriggers from the beginning; Loop playback joins the shared cycle.
-        </p>
-        <button
-          disabled={!enabled || track.state === 'Empty'}
-          onClick={onClear}
-        >
-          CLEAR
-        </button>
+        <details>
+          <summary>Track {number} diagnostics</summary>
+          <p>
+            Captured samples:{' '}
+            <span data-testid="captured-samples">{track.capturedSamples}</span>
+          </p>
+          <p>
+            Loop samples:{' '}
+            <span data-testid="loop-length">{track.lengthSamples}</span>
+          </p>
+        </details>
+        <div className="destructive-controls">
+          <p>
+            Track STOP retains audio. CLEAR preserves the shared cycle. One-shot
+            retriggers from the beginning; Loop playback joins the shared cycle.
+          </p>
+          <button
+            disabled={!enabled || track.state === 'Empty'}
+            onClick={onClear}
+          >
+            CLEAR
+          </button>
+        </div>
       </details>
     </section>
   );

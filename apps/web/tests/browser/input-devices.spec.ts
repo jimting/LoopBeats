@@ -37,7 +37,8 @@ test('shows input selection and gates switching during capture', async ({
   });
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
@@ -97,7 +98,8 @@ test('reports a rejected switch and keeps the previous input selected', async ({
   });
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
@@ -166,7 +168,8 @@ test('does not replace input when recording begins during a delayed switch', asy
   });
   await page.goto('/');
   await page
-    .getByText('Session controls and diagnostics', { exact: true })
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
     .click();
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('status')).toContainText('Audio ready');
