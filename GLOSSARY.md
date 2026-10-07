@@ -71,3 +71,13 @@ _Avoid_: Stopped, paused.
 **Track gain**: A linear playback multiplier for one track, independent of captured audio and mute.
 
 **Master gain**: A linear multiplier on the summed track and monitoring output before clipping protection.
+
+**Session file**: A portable saved representation of a session, containing completed track recordings and the session settings needed to continue working with them.
+_Avoid_: Project file, saved settings
+
+**Recovery snapshot**: An automatically maintained browser-stored representation of the current session used to recover work after an unexpected shutdown or crash.
+_Avoid_: Autosave file, session file
+
+**Session export**: The operation that packages a session file for download outside the browser.
+
+**Session import**: The operation that validates a session file and replaces the current session with its contents.
