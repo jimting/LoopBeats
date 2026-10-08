@@ -32,7 +32,100 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.inputLevel = 0;
     this.outputLevel = 0;
     this.failed = false;
+    this.exportSession = null;
     this.port.onmessage = ({ data }) => {
+      if (
+        data.type === 'export-begin' ||
+        data.type === 'export-read' ||
+        data.type === 'export-finish'
+      ) {
+        const reply = { type: 'export-reply', requestId: data.requestId };
+        try {
+          if (this.failed) throw new Error('Audio processor is unavailable.');
+          if (data.type === 'export-begin') {
+            if (
+              [0, 1].some(
+                (id) => this.engine.track_state(id) === TRACK_STATE.Overdubbing,
+              )
+            )
+              throw new Error('Finish overdub before exporting.');
+            const tracks = [0, 1].map((id) => {
+              const completed = [
+                TRACK_STATE.Playing,
+                TRACK_STATE.Stopped,
+              ].includes(this.engine.track_state(id));
+              return {
+                id,
+                mode: this.engine.playback_mode(id) === 1 ? 'OneShot' : 'Loop',
+                gain: this.engine.track_gain(id),
+                muted: Boolean(this.engine.track_muted(id)),
+                lengthSamples: completed ? this.engine.loop_length(id) : 0,
+                audioPath: completed ? `tracks/${id}.wav` : null,
+              };
+            });
+            this.exportSession = {
+              token: data.requestId,
+              tracks,
+              revisions: [0, 1].map((id) => this.engine.recording_revision(id)),
+            };
+            reply.manifest = {
+              format: 'LoopBeatsSession',
+              version: 1,
+              sampleRate,
+              cycleLengthSamples: this.engine.cycle_length(),
+              masterGain: this.engine.master_gain(),
+              tracks,
+            };
+          } else {
+            const session = this.exportSession;
+            if (!session || session.token !== data.token)
+              throw new Error('Export was canceled.');
+            for (const track of session.tracks) {
+              if (
+                track.audioPath &&
+                (this.engine.recording_revision(track.id) !==
+                  session.revisions[track.id] ||
+                  ![TRACK_STATE.Playing, TRACK_STATE.Stopped].includes(
+                    this.engine.track_state(track.id),
+                  ))
+              )
+                throw new Error('Recording changed during export. Try again.');
+            }
+            if (data.type === 'export-read') {
+              const track = session.tracks[data.trackId];
+              if (
+                !track?.audioPath ||
+                !Number.isInteger(data.offset) ||
+                data.offset < 0 ||
+                !Number.isInteger(data.frames) ||
+                data.frames < 1 ||
+                data.frames > 2048 ||
+                data.offset + data.frames > track.lengthSamples ||
+                !this.engine.read_recording(
+                  data.trackId,
+                  session.revisions[data.trackId],
+                  data.offset,
+                  data.frames,
+                )
+              )
+                throw new Error('Recording is no longer exportable.');
+              reply.samples = this.output.slice(0, data.frames);
+            } else this.exportSession = null;
+          }
+        } catch (error) {
+          reply.error = error.message;
+          this.exportSession = null;
+        }
+        this.port.postMessage(
+          reply,
+          reply.samples ? [reply.samples.buffer] : [],
+        );
+        return;
+      }
+      if (data.type === 'export-cancel') {
+        if (this.exportSession?.token === data.token) this.exportSession = null;
+        return;
+      }
       if (data.type === 'monitoring' && !this.failed)
         this.engine.set_monitoring(data.enabled ? 1 : 0);
       if (!this.failed) {

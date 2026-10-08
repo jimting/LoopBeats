@@ -7,6 +7,7 @@ import type {
   TransportSnapshot,
 } from '@loopbeats/domain';
 export type { AudioSnapshot } from '@loopbeats/domain';
+import { assembleSession, type ExportReply } from './session-export';
 
 type Session = {
   context: AudioContext;
@@ -87,6 +88,9 @@ export class AudioClient {
   private session: Session | null = null;
   private attempt = 0;
   private inputError: string | null = null;
+  private exportSequence = 0;
+  private cancelExport: (() => void) | null = null;
+  private exportReply: ((reply: ExportReply) => void) | null = null;
   constructor(private assets: { wasm: string; worklet: string }) {}
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {
@@ -132,6 +136,7 @@ export class AudioClient {
       (session.interrupted && !session.recovering)
     )
       return;
+    this.cancelExport?.();
     ++this.attempt;
     session.interrupted = true;
     session.recovering = false;
@@ -152,6 +157,7 @@ export class AudioClient {
     });
   }
   private async release(session: Session) {
+    this.cancelExport?.();
     clearInterval(session.interval);
     session.cancelStartup?.();
     session.finishRecovery?.(new Error('Audio recovery canceled'));
@@ -263,7 +269,13 @@ export class AudioClient {
             'The audio processor stopped. Try Start audio again to create a new session.',
           );
         };
-        node.port.onmessage = ({ data }: MessageEvent<WorkletSnapshot>) => {
+        node.port.onmessage = ({
+          data,
+        }: MessageEvent<WorkletSnapshot | ExportReply>) => {
+          if (data.type === 'export-reply') {
+            if (this.session === current) this.exportReply?.(data);
+            return;
+          }
           if (this.session !== current) {
             finish();
             return;
@@ -350,6 +362,7 @@ export class AudioClient {
     );
     if (active || this.snapshot.transport.running) return false;
     session.switching = true;
+    this.cancelExport?.();
     const switchToken = (session.switchToken ?? 0) + 1;
     session.switchToken = switchToken;
     const attempt = this.attempt;
@@ -502,6 +515,90 @@ export class AudioClient {
         type: 'monitoring',
         enabled,
       } satisfies AudioCommand);
+  }
+  /** Downloadable completed-session archive; no browser infrastructure escapes this client. */
+  async exportSession(
+    options: {
+      signal?: AbortSignal;
+      onProgress?: (fraction: number) => void;
+    } = {},
+  ): Promise<Blob> {
+    const session = this.session;
+    if (this.snapshot.status !== 'ready' || !session?.node || session.switching)
+      throw new Error('Start audio before exporting.');
+    if (this.cancelExport) throw new Error('An export is already in progress.');
+    const port = session.node.port;
+    const token = ++this.exportSequence;
+    let canceled = false;
+    let rejectRequest: ((error: Error) => void) | undefined;
+    const cancel = () => {
+      canceled = true;
+      port.postMessage({ type: 'export-cancel', token });
+      rejectRequest?.(new Error('Export canceled.'));
+    };
+    this.cancelExport = cancel;
+    const check = () => {
+      if (
+        canceled ||
+        options.signal?.aborted ||
+        this.session !== session ||
+        this.snapshot.status !== 'ready'
+      )
+        throw new Error('Export canceled.');
+    };
+    const request = (
+      type: string,
+      fields: Record<string, number> = {},
+      requestId = ++this.exportSequence,
+    ) => {
+      check();
+      return new Promise<ExportReply>((resolve, reject) => {
+        const timer = setTimeout(
+          () => finish(new Error('Export transfer timed out. Try again.')),
+          30000,
+        );
+        const finish = (error?: Error, reply?: ExportReply) => {
+          clearTimeout(timer);
+          this.exportReply = null;
+          rejectRequest = undefined;
+          if (error) reject(error);
+          else resolve(reply!);
+        };
+        rejectRequest = (error) => finish(error);
+        this.exportReply = (reply) => {
+          if (reply.requestId === requestId)
+            finish(reply.error ? new Error(reply.error) : undefined, reply);
+        };
+        port.postMessage({ type, token, requestId, ...fields });
+      });
+    };
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      const start = await request('export-begin', {}, token);
+      if (!start.manifest) throw new Error('Export metadata is unavailable.');
+      const blob = await assembleSession(
+        start.manifest,
+        async (trackId, offset, frames) => {
+          const reply = await request('export-read', {
+            trackId,
+            offset,
+            frames,
+          });
+          if (!reply.samples) throw new Error('Export audio is unavailable.');
+          return reply.samples;
+        },
+        check,
+        options.onProgress ?? (() => {}),
+      );
+      await request('export-finish');
+      check();
+      return blob;
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      port.postMessage({ type: 'export-cancel', token });
+      this.cancelExport = null;
+      this.exportReply = null;
+    }
   }
   private command(command: AudioCommand): void {
     if (this.snapshot.status === 'ready')

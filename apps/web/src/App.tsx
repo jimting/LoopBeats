@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
 import { TrackStrip } from './TrackStrip';
+import { SessionExport } from './SessionExport';
 
 type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
 type InputDevice = { id: string; label: string };
@@ -371,6 +372,14 @@ export function App() {
         </div>
         <details className="session-tools">
           <summary>Settings</summary>
+          <SessionExport
+            client={client}
+            enabled={
+              ready &&
+              !switchPending &&
+              !snapshot.tracks.some((track) => track.state === 'Overdubbing')
+            }
+          />
           <section aria-labelledby="settings-heading">
             <h2 id="settings-heading">Settings</h2>
             {ready && inputDevices.length > 0 && (
