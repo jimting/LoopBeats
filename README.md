@@ -100,6 +100,16 @@ Run `npm run check` for scaffold, type, lint, formatting and TypeScript unit che
 
 Vendored Matt Pocock skills are MIT licensed, pinned and attributed in `.agents/skills/UPSTREAM.md`. `/to-issues` is local compatibility naming, not an upstream skill.
 
+## Completed session export (#50)
+
+Open **Settings** and choose **Export session** while audio is ready. The ZIP
+contains a versioned session manifest and mono float32 WAVs for completed
+recordings, preserving raw audio, modes, gain/mute, master gain and shared-cycle
+alignment. Unfinished initial recordings are excluded; finish overdub before
+exporting. Playback can continue. Cancel or failure leaves the live session
+unchanged. This slice provides export only; import and automatic recovery follow
+in #51–#54. See [the export contract](docs/specs/session-export-50.md).
+
 ## Rust/WASM audio experiment (#6)
 
 This isolated feasibility page is separate from the production application. Install Node 24 and Rust via rustup (the repository toolchain installs its WASM target), then run:

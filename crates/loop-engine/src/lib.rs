@@ -48,6 +48,7 @@ struct Transport {
     cycle_length: usize,
 }
 struct Track {
+    revision: u32,
     muted: bool,
     gain: f32,
     mode: PlaybackMode,
@@ -83,6 +84,7 @@ impl LoopEngine {
             master_gain: 1.0,
             monitoring: false,
             tracks: std::array::from_fn(|_| Track {
+                revision: 0,
                 muted: false,
                 gain: 1.0,
                 mode: PlaybackMode::Loop,
@@ -119,6 +121,35 @@ impl LoopEngine {
     pub fn monitoring(&self) -> bool {
         self.monitoring
     }
+    /// Stable content identity for a bounded export. Exhausted identities fail closed.
+    pub fn recording_revision(&self, track_id: usize) -> u32 {
+        self.tracks.get(track_id).map_or(0, |track| track.revision)
+    }
+    /// Read completed audio without exposing storage or allocating on the audio thread.
+    pub fn read_recording(
+        &self,
+        track_id: usize,
+        revision: u32,
+        offset: usize,
+        output: &mut [f32],
+    ) -> bool {
+        let Some(track) = self.tracks.get(track_id) else {
+            return false;
+        };
+        if revision == u32::MAX
+            || revision != track.revision
+            || !matches!(track.state, TrackState::Playing | TrackState::Stopped)
+            || output.len() > 2048
+            || offset > track.length
+            || output.len() > track.length - offset
+        {
+            return false;
+        }
+        for (index, sample) in output.iter_mut().enumerate() {
+            *sample = track.recording.read(offset + index);
+        }
+        true
+    }
     /// Select capture mode or convert a stopped recording without changing its samples.
     pub fn set_mode(&mut self, track_id: usize, mode: PlaybackMode) {
         let Some(availability) = self.snapshot().tracks.get(track_id).copied() else {
@@ -141,6 +172,7 @@ impl LoopEngine {
             TrackState::Recording => self.finish_recording(track_id, true),
             TrackState::Overdubbing => self.tracks[track_id].state = TrackState::Playing,
             TrackState::Playing | TrackState::Stopped => {
+                self.tracks[track_id].revision = self.tracks[track_id].revision.saturating_add(1);
                 if self.transport.cycle_length == 0 {
                     self.transport.cycle_length = self.tracks[track_id].length;
                     self.transport.position = 0;
@@ -150,6 +182,7 @@ impl LoopEngine {
             }
             TrackState::Empty => {
                 let track = &mut self.tracks[track_id];
+                track.revision = track.revision.saturating_add(1);
                 track.recording.begin_capture();
                 track.state = TrackState::Recording;
                 track.length = if track.mode == PlaybackMode::Loop {
@@ -170,6 +203,7 @@ impl LoopEngine {
             track.length = 0;
             return;
         }
+        track.revision = track.revision.saturating_add(1);
         if track.mode == PlaybackMode::OneShot {
             track.length = track.captured;
             track.one_shot_position = 0;
@@ -214,6 +248,7 @@ impl LoopEngine {
     /// Remove a recording in constant time; fresh capture invalidates old storage lazily.
     pub fn clear(&mut self, track_id: usize) {
         if let Some(track) = self.tracks.get_mut(track_id) {
+            track.revision = track.revision.saturating_add(1);
             track.state = TrackState::Empty;
             track.length = 0;
             track.captured = 0;
@@ -631,6 +666,30 @@ mod wasm {
     #[no_mangle]
     pub extern "C" fn capacity() -> usize {
         CAPACITY
+    }
+    #[no_mangle]
+    pub extern "C" fn recording_revision(track_id: usize) -> u32 {
+        with_engine(|engine| engine.recording_revision(track_id))
+    }
+    #[no_mangle]
+    pub extern "C" fn read_recording(
+        track_id: usize,
+        revision: u32,
+        offset: usize,
+        frames: usize,
+    ) -> u32 {
+        if frames > CAPACITY {
+            return 0;
+        }
+        // SAFETY: bounded fixed output buffer, used only by the serialized host.
+        with_engine(|engine| unsafe {
+            engine.read_recording(
+                track_id,
+                revision,
+                offset,
+                core::slice::from_raw_parts_mut(output_ptr(), frames),
+            ) as u32
+        })
     }
     #[no_mangle]
     pub extern "C" fn set_monitoring(enabled: u32) {
