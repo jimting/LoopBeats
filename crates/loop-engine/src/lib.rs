@@ -203,6 +203,7 @@ impl LoopEngine {
             track.length = 0;
             return;
         }
+        track.revision = track.revision.saturating_add(1);
         if track.mode == PlaybackMode::OneShot {
             track.length = track.captured;
             track.one_shot_position = 0;

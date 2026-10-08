@@ -49,8 +49,19 @@ test('downloads a standard ZIP of completed audio while another track is recordi
     'Recording',
   );
   const downloading = page.waitForEvent('download');
+  const started = Date.now();
   await exportButton.click();
+  await page.evaluate(() => {
+    const end = performance.now() + 100;
+    while (performance.now() < end) {
+      /* reproducible main-thread load */
+    }
+  });
   const download = await downloading;
+  const elapsedMs = Date.now() - started;
+  console.log(
+    `Export load measurement: ${elapsedMs} ms including 100 ms main-thread load; ${length} frames.`,
+  );
   expect(download.suggestedFilename()).toMatch(/^loopbeats-session-.*\.zip$/);
   const path = testInfo.outputPath('session.zip');
   await download.saveAs(path);
@@ -78,6 +89,9 @@ with zipfile.ZipFile(sys.argv[1]) as z:
     ),
   );
   expect(decoded.names).toEqual(['session.json', 'tracks/0.wav']);
+  console.log(
+    `Export source sample rate: ${decoded.manifest.sampleRate} Hz; WAV payload: ${decoded.bytes - 56} bytes.`,
+  );
   expect(decoded.frames).toBe(length);
   expect(decoded.bytes).toBe(56 + length * 4);
   expect(decoded.nonzero).toBe(true);
@@ -94,6 +108,28 @@ with zipfile.ZipFile(sys.argv[1]) as z:
   });
   await expect(tracks.nth(0).getByTestId('track-state')).toHaveText('Playing');
   await expect(page.getByText('Monitoring off', { exact: true })).toBeVisible();
+  const position = Number(
+    await page.getByTestId('transport-position').textContent(),
+  );
+  await expect
+    .poll(async () =>
+      Number(await page.getByTestId('transport-position').textContent()),
+    )
+    .toBeGreaterThan(position);
+  await testInfo.attach('export-load-measurement', {
+    contentType: 'application/json',
+    body: Buffer.from(
+      JSON.stringify({
+        sampleRate: decoded.manifest.sampleRate,
+        frames: decoded.frames,
+        wavBytes: decoded.bytes,
+        elapsedMs,
+        mainThreadLoadMs: 100,
+        playbackContinued: true,
+        unfinishedTrackExcluded: true,
+      }),
+    ),
+  });
   await tracks.nth(1).getByRole('button', { name: 'Track STOP' }).click();
   await tracks
     .nth(0)
@@ -103,6 +139,48 @@ with zipfile.ZipFile(sys.argv[1]) as z:
     'Overdubbing',
   );
   await expect(exportButton).toBeDisabled();
+});
+
+test('allocation failure leaves the live session intact and export can be retried', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = window.Blob;
+    window.Blob = class extends original {
+      constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+        if (options?.type === 'application/zip')
+          throw new RangeError('Simulated browser allocation failure');
+        super(parts, options);
+      }
+    };
+    window.addEventListener('restore-blob', () => {
+      window.Blob = original;
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start audio', exact: true }).click();
+  const track = page.locator('.track-strip').nth(0);
+  const rec = track.getByRole('button', { name: /REC\/PLAY/ });
+  await expect(rec).toBeEnabled();
+  await rec.click();
+  await page.waitForTimeout(200);
+  await rec.click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
+    .click();
+  await page
+    .getByRole('button', { name: 'Export session', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toContainText('Not enough memory');
+  await expect(track.getByTestId('track-state')).toHaveText('Playing');
+  await page.evaluate(() => window.dispatchEvent(new Event('restore-blob')));
+  const download = page.waitForEvent('download');
+  await page
+    .getByRole('button', { name: 'Export session', exact: true })
+    .click();
+  await download;
+  await expect(track.getByTestId('track-state')).toHaveText('Playing');
 });
 
 test('worklet export reads exact known samples and rejects changed recordings', async ({

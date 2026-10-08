@@ -29,6 +29,8 @@ fn export_preserves_phase_silence_and_rejects_unfinished_or_mutated_audio() {
     let revision = engine.recording_revision(1);
     assert!(!engine.read_recording(1, revision, 0, &mut [0.0; 4]));
     engine.record(1);
+    assert!(!engine.read_recording(1, revision, 0, &mut [0.0; 4]));
+    let revision = engine.recording_revision(1);
     let mut samples = [1.0; 4];
     assert!(engine.read_recording(1, revision, 0, &mut samples));
     assert_eq!(samples, [0.0, 0.0, 0.25, 0.0]);

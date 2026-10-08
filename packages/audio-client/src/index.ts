@@ -90,6 +90,7 @@ export class AudioClient {
   private inputError: string | null = null;
   private exportSequence = 0;
   private cancelExport: (() => void) | null = null;
+  private exportOwner: Session | null = null;
   private exportReply: ((reply: ExportReply) => void) | null = null;
   constructor(private assets: { wasm: string; worklet: string }) {}
   getSnapshot = () => this.snapshot;
@@ -157,7 +158,7 @@ export class AudioClient {
     });
   }
   private async release(session: Session) {
-    this.cancelExport?.();
+    if (this.exportOwner === session) this.cancelExport?.();
     clearInterval(session.interval);
     session.cancelStartup?.();
     session.finishRecovery?.(new Error('Audio recovery canceled'));
@@ -537,6 +538,7 @@ export class AudioClient {
       rejectRequest?.(new Error('Export canceled.'));
     };
     this.cancelExport = cancel;
+    this.exportOwner = session;
     const check = () => {
       if (
         canceled ||
@@ -569,7 +571,11 @@ export class AudioClient {
           if (reply.requestId === requestId)
             finish(reply.error ? new Error(reply.error) : undefined, reply);
         };
-        port.postMessage({ type, token, requestId, ...fields });
+        try {
+          port.postMessage({ type, token, requestId, ...fields });
+        } catch {
+          finish(new Error('Export transfer failed. Try again.'));
+        }
       });
     };
     options.signal?.addEventListener('abort', cancel, { once: true });
@@ -593,10 +599,21 @@ export class AudioClient {
       await request('export-finish');
       check();
       return blob;
+    } catch (error) {
+      if (
+        error instanceof RangeError ||
+        (error instanceof DOMException && error.name === 'QuotaExceededError')
+      )
+        throw new Error(
+          'Not enough memory to export this session. Free memory or export shorter recordings, then try again. Your recordings are unchanged.',
+          { cause: error },
+        );
+      throw error;
     } finally {
       options.signal?.removeEventListener('abort', cancel);
       port.postMessage({ type: 'export-cancel', token });
       this.cancelExport = null;
+      this.exportOwner = null;
       this.exportReply = null;
     }
   }
