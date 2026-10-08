@@ -7,16 +7,18 @@ recorded in specification #49. Import and recovery remain separate slices.
 ## Automated evidence
 
 - Full production-browser suite: 101 tests passed before review refinements.
-- After refinements: four focused export tests pass, covering downloaded ZIP/CRC
+- After refinements: five focused export tests pass, covering downloaded ZIP/CRC
   validation by Python's independent ZIP reader, exact known audio through the
   real worklet/WASM, generation invalidation, allocation failure/retry and the
-  192,000 Hz / 60-second engine capacity boundary.
+  192,000 Hz / 60-second engine capacity boundary, and throwing browser-port
+  cancellation followed by a successful retry.
 - Full Vitest suite: 28 tests passed, including observable cancellation/error
   presentation. TypeScript and ESLint pass; production build and WASM build pass.
 - Cargo fmt, cargo check for all targets/tests, and workspace clippy pass.
   Native Cargo tests cannot run locally because the Windows MSVC linker
   `link.exe` is not installed. This is not a claimed native test pass; CI must
   run the Rust test suite before merge.
+  The Rust CI job passed on commit `3d94420`; final-head CI remains a merge gate.
 - The default formatting check flags pre-existing CRLF checkout endings in 52
   untouched files. Checking with `--end-of-line auto` passes across the repository;
   changed source files are formatted normally. No unrelated files were reformatted.
@@ -44,6 +46,9 @@ WASM reads, not end-to-end maximum-size archive performance.
 Standards review: no findings. Spec review identified completion revision,
 actionable allocation errors and measurement-documentation gaps; all three were
 addressed with focused regression coverage and this record.
+Final standards re-review also found a throwing cancellation send could block
+local cleanup. Best-effort sending plus cleanup-first finalization fixes it;
+the browser fault-injection regression failed before the fix and passes after it.
 
 Affected listening cases: M02, M04, M05 and M09 (playback/capture progression while
 export transfers run). Manual verification is deferred under the shared testing

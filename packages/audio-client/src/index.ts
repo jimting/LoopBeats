@@ -532,9 +532,16 @@ export class AudioClient {
     const token = ++this.exportSequence;
     let canceled = false;
     let rejectRequest: ((error: Error) => void) | undefined;
+    const sendCancellation = () => {
+      try {
+        port.postMessage({ type: 'export-cancel', token });
+      } catch {
+        // A failed browser port must not prevent local rejection or cleanup.
+      }
+    };
     const cancel = () => {
       canceled = true;
-      port.postMessage({ type: 'export-cancel', token });
+      sendCancellation();
       rejectRequest?.(new Error('Export canceled.'));
     };
     this.cancelExport = cancel;
@@ -611,10 +618,10 @@ export class AudioClient {
       throw error;
     } finally {
       options.signal?.removeEventListener('abort', cancel);
-      port.postMessage({ type: 'export-cancel', token });
       this.cancelExport = null;
       this.exportOwner = null;
       this.exportReply = null;
+      sendCancellation();
     }
   }
   private command(command: AudioCommand): void {

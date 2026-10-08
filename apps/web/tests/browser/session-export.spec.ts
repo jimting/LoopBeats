@@ -279,3 +279,50 @@ test('WASM export enforces chunk bounds at the maximum supported recording capac
   expect(result.oversized).toBe(0);
   expect(result.overflow).toBe(0);
 });
+
+test('a throwing browser port cannot prevent cancellation or a later export', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = MessagePort.prototype.postMessage;
+    MessagePort.prototype.postMessage = function (
+      message: { type?: string },
+      transfer?: Transferable[] | StructuredSerializeOptions,
+    ) {
+      if (message?.type === 'export-read') return; // Simulate an unanswered browser transfer.
+      if (message?.type === 'export-cancel')
+        throw new Error('Simulated unavailable browser port');
+      Reflect.apply(original, this, [message, transfer ?? []]);
+    };
+    window.addEventListener('restore-port', () => {
+      MessagePort.prototype.postMessage = original;
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Start audio', exact: true }).click();
+  const track = page.locator('.track-strip').nth(0);
+  const rec = track.getByRole('button', { name: /REC\/PLAY/ });
+  await expect(rec).toBeEnabled();
+  await rec.click();
+  await page.waitForTimeout(200);
+  await rec.click();
+  await page
+    .locator('summary')
+    .filter({ hasText: /^Settings$/ })
+    .click();
+  const exporting = page.getByRole('button', {
+    name: 'Export session',
+    exact: true,
+  });
+  await exporting.click();
+  await page.getByRole('button', { name: 'Cancel export' }).click();
+  await expect(
+    page.getByText('Export canceled.', { exact: true }),
+  ).toBeVisible();
+  await expect(exporting).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('restore-port')));
+  const downloading = page.waitForEvent('download');
+  await exporting.click();
+  await downloading;
+  await expect(track.getByTestId('track-state')).toHaveText('Playing');
+});
