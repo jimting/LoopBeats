@@ -4,6 +4,28 @@ Scope: completed-session ZIP export only. Contract: [session export](../specs/se
 The owner approved the contract in the implementation conversation; approval is
 recorded in specification #49. Import and recovery remain separate slices.
 
+## PR P2 capacity coverage
+
+The serialization seam used by AudioClient now assembles two 60-second recordings
+at 192,000 Hz: 11,520,000 frames and 46,080,000 sample bytes per track.
+Python's independent ZIP reader verifies all CRCs and entries, the manifest,
+both WAV headers and lengths, and every sample byte (including finite -1.5 audio).
+This complements the real WASM maximum-capacity test; generated serialization
+input does not establish audio capture correctness or hardware performance.
+
+Source rates 8,000 and 192,000 Hz are accepted; adjacent unsupported and fractional
+rates are rejected. JSON at exactly 64 KiB is accepted and one byte more rejected.
+Negative, fractional, non-finite and over-60-second lengths, oversized metadata,
+and oversized archive/memory inputs fail before any recording read or WAV/Blob
+assembly. The valid two-track maximum remains below 96 MiB; length/rate/track
+bounds also constrain temporary assembly memory below the contract's 384 MiB.
+Archive and memory overflow cannot be reached with otherwise valid metadata;
+oversized fault inputs are rejected by preflight rather than allocated.
+
+Run `npm test -- packages/audio-client/src/session-export.test.ts` on Node 24.
+All 13 capacity/boundary tests and the full 41-test unit suite passed locally;
+TypeScript and focused ESLint checks passed. No production behavior changed.
+
 ## Automated evidence
 
 - Full production-browser suite: 101 tests passed before review refinements.
