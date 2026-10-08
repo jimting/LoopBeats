@@ -33,7 +33,106 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.outputLevel = 0;
     this.failed = false;
     this.exportSession = null;
+    this.importSession = null;
     this.port.onmessage = ({ data }) => {
+      if (data.type.startsWith('import-')) {
+        const reply = { type: 'import-reply', requestId: data.requestId };
+        try {
+          if (data.type === 'import-cancel') {
+            if (this.importSession?.token === data.token) {
+              this.importSession = null;
+              this.engine.import_cancel();
+            }
+            return;
+          }
+          if (this.failed) throw new Error('Audio processor is unavailable.');
+          if (data.type === 'import-begin') {
+            if (
+              this.exportSession ||
+              [0, 1].some((id) => [1, 4].includes(this.engine.track_state(id)))
+            )
+              throw new Error(
+                'Finish recording and other session operations before importing.',
+              );
+            if (
+              this.importSession &&
+              data.requestId <= this.importSession.token
+            )
+              throw new Error('Stale import operation.');
+            this.engine.import_cancel();
+            this.importSession = {
+              token: data.requestId,
+              revision: this.engine.command_revision(),
+            };
+            reply.hasRecordings = [0, 1].some(
+              (id) => this.engine.loop_length(id) > 0,
+            );
+          } else {
+            const session = this.importSession;
+            if (
+              !session ||
+              session.token !== data.token ||
+              session.revision !== this.engine.command_revision()
+            )
+              throw new Error('Session changed during import. Try again.');
+            if (data.type === 'import-configure') {
+              const m = data.manifest;
+              if (
+                m.sampleRate !== sampleRate ||
+                !this.engine.import_begin(
+                  session.revision,
+                  m.cycleLengthSamples,
+                  m.masterGain,
+                  ...m.tracks.flatMap((t) => [
+                    t.lengthSamples,
+                    t.mode === 'OneShot' ? 1 : 0,
+                    t.gain,
+                    Number(t.muted),
+                  ]),
+                )
+              )
+                throw new Error('Session cannot be staged.');
+            } else if (data.type === 'import-write') {
+              if (
+                !(data.samples instanceof Float32Array) ||
+                data.samples.length < 1 ||
+                data.samples.length > 2048 ||
+                !Number.isInteger(data.offset) ||
+                data.offset < 0 ||
+                ![0, 1].includes(data.trackId)
+              )
+                throw new Error('Invalid import transfer.');
+              this.input.set(data.samples);
+              if (
+                !this.engine.import_write(
+                  data.trackId,
+                  data.offset,
+                  data.samples.length,
+                )
+              )
+                throw new Error(
+                  'Import staging failed. The current session is unchanged.',
+                );
+            } else if (data.type === 'import-commit') {
+              if (!this.engine.import_commit())
+                throw new Error('Import is incomplete or stale. Try again.');
+              this.importSession = null;
+              this.publishSnapshot();
+            } else throw new Error('Unsupported import command.');
+          }
+        } catch (error) {
+          reply.error = error.message;
+          const owned =
+            this.importSession?.token ===
+            (data.type === 'import-begin' ? data.requestId : data.token);
+          if (owned) {
+            this.importSession = null;
+            this.engine.import_cancel();
+          }
+        }
+        this.port.postMessage(reply);
+        return;
+      }
       if (
         data.type === 'export-begin' ||
         data.type === 'export-read' ||
@@ -43,6 +142,8 @@ class LoopProcessor extends AudioWorkletProcessor {
         try {
           if (this.failed) throw new Error('Audio processor is unavailable.');
           if (data.type === 'export-begin') {
+            if (this.importSession)
+              throw new Error('Import is already in progress.');
             if (
               [0, 1].some(
                 (id) => this.engine.track_state(id) === TRACK_STATE.Overdubbing,
@@ -207,37 +308,40 @@ class LoopProcessor extends AudioWorkletProcessor {
           }
         }
       }
-      this.port.postMessage({
-        type: 'snapshot',
-        masterGain: this.engine.master_gain(),
-        failed: this.failed,
-        monitoring: Boolean(this.engine.monitoring()),
-        processedFrames: this.frames,
-        transport: {
-          running: Boolean(this.engine.transport_running()),
-          positionSamples: this.engine.transport_position(),
-          cycleLengthSamples: this.engine.cycle_length(),
-        },
-        tracks: [0, 1].map((trackId) => ({
-          gain: this.engine.track_gain(trackId),
-          muted: Boolean(this.engine.track_muted(trackId)),
-          mode: this.engine.playback_mode(trackId) === 1 ? 'OneShot' : 'Loop',
-          canSetMode: Boolean(this.engine.can_set_mode(trackId)),
-          canSetLoop: Boolean(this.engine.can_set_loop(trackId)),
-          state: TRACK_STATE_NAMES[this.engine.track_state(trackId)],
-          lengthSamples: this.engine.loop_length(trackId),
-          capturedSamples: this.engine.captured_samples(trackId),
-          capacitySamples: this.engine.recording_capacity(trackId),
-          captureLimitSamples: this.engine.capture_limit(trackId),
-          canRecord: Boolean(this.engine.can_record(trackId)),
-          canPlay: Boolean(this.engine.can_play(trackId)),
-          canStop: Boolean(this.engine.can_stop(trackId)),
-          positionSamples: this.engine.loop_position(trackId),
-        })),
-        inputLevel: this.inputLevel,
-        outputLevel: this.outputLevel,
-      });
+      this.publishSnapshot();
     };
+  }
+  publishSnapshot() {
+    this.port.postMessage({
+      type: 'snapshot',
+      masterGain: this.engine.master_gain(),
+      failed: this.failed,
+      monitoring: Boolean(this.engine.monitoring()),
+      processedFrames: this.frames,
+      transport: {
+        running: Boolean(this.engine.transport_running()),
+        positionSamples: this.engine.transport_position(),
+        cycleLengthSamples: this.engine.cycle_length(),
+      },
+      tracks: [0, 1].map((trackId) => ({
+        gain: this.engine.track_gain(trackId),
+        muted: Boolean(this.engine.track_muted(trackId)),
+        mode: this.engine.playback_mode(trackId) === 1 ? 'OneShot' : 'Loop',
+        canSetMode: Boolean(this.engine.can_set_mode(trackId)),
+        canSetLoop: Boolean(this.engine.can_set_loop(trackId)),
+        state: TRACK_STATE_NAMES[this.engine.track_state(trackId)],
+        lengthSamples: this.engine.loop_length(trackId),
+        capturedSamples: this.engine.captured_samples(trackId),
+        capacitySamples: this.engine.recording_capacity(trackId),
+        captureLimitSamples: this.engine.capture_limit(trackId),
+        canRecord: Boolean(this.engine.can_record(trackId)),
+        canPlay: Boolean(this.engine.can_play(trackId)),
+        canStop: Boolean(this.engine.can_stop(trackId)),
+        positionSamples: this.engine.loop_position(trackId),
+      })),
+      inputLevel: this.inputLevel,
+      outputLevel: this.outputLevel,
+    });
   }
   process(inputs, outputs) {
     const channels = outputs[0];

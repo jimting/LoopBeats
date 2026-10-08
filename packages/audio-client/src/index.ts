@@ -8,6 +8,13 @@ import type {
 } from '@loopbeats/domain';
 export type { AudioSnapshot } from '@loopbeats/domain';
 import { assembleSession, type ExportReply } from './session-export';
+import { parseSession } from './session-import';
+type ImportReply = {
+  type: 'import-reply';
+  requestId: number;
+  error?: string;
+  hasRecordings?: boolean;
+};
 
 type Session = {
   context: AudioContext;
@@ -92,6 +99,9 @@ export class AudioClient {
   private cancelExport: (() => void) | null = null;
   private exportOwner: Session | null = null;
   private exportReply: ((reply: ExportReply) => void) | null = null;
+  private cancelImport: (() => void) | null = null;
+  private importOwner: Session | null = null;
+  private importReply: ((reply: ImportReply) => void) | null = null;
   constructor(private assets: { wasm: string; worklet: string }) {}
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {
@@ -138,6 +148,7 @@ export class AudioClient {
     )
       return;
     this.cancelExport?.();
+    this.cancelImport?.();
     ++this.attempt;
     session.interrupted = true;
     session.recovering = false;
@@ -159,6 +170,7 @@ export class AudioClient {
   }
   private async release(session: Session) {
     if (this.exportOwner === session) this.cancelExport?.();
+    if (this.importOwner === session) this.cancelImport?.();
     clearInterval(session.interval);
     session.cancelStartup?.();
     session.finishRecovery?.(new Error('Audio recovery canceled'));
@@ -272,7 +284,11 @@ export class AudioClient {
         };
         node.port.onmessage = ({
           data,
-        }: MessageEvent<WorkletSnapshot | ExportReply>) => {
+        }: MessageEvent<WorkletSnapshot | ExportReply | ImportReply>) => {
+          if (data.type === 'import-reply') {
+            if (this.session === current) this.importReply?.(data);
+            return;
+          }
           if (data.type === 'export-reply') {
             if (this.session === current) this.exportReply?.(data);
             return;
@@ -364,6 +380,7 @@ export class AudioClient {
     if (active || this.snapshot.transport.running) return false;
     session.switching = true;
     this.cancelExport?.();
+    this.cancelImport?.();
     const switchToken = (session.switchToken ?? 0) + 1;
     session.switchToken = switchToken;
     const attempt = this.attempt;
@@ -527,7 +544,8 @@ export class AudioClient {
     const session = this.session;
     if (this.snapshot.status !== 'ready' || !session?.node || session.switching)
       throw new Error('Start audio before exporting.');
-    if (this.cancelExport) throw new Error('An export is already in progress.');
+    if (this.cancelExport || this.cancelImport)
+      throw new Error('A session operation is already in progress.');
     const port = session.node.port;
     const token = ++this.exportSequence;
     let canceled = false;
@@ -621,6 +639,176 @@ export class AudioClient {
       this.cancelExport = null;
       this.exportOwner = null;
       this.exportReply = null;
+      sendCancellation();
+    }
+  }
+  /** Validate/stage first; the worklet atomically installs both tracks on commit. */
+  async importSession(
+    file: Blob,
+    options: {
+      signal?: AbortSignal;
+      onProgress?: (fraction: number) => void;
+      onCommitting?: () => void;
+      confirmReplace: (signal: AbortSignal) => Promise<boolean>;
+    },
+  ): Promise<boolean> {
+    const session = this.session;
+    if (this.snapshot.status !== 'ready' || !session?.node || session.switching)
+      throw new Error('Start audio before importing.');
+    if (this.cancelExport || this.cancelImport)
+      throw new Error('A session operation is already in progress.');
+    if (
+      this.snapshot.tracks.some((t) =>
+        ['Recording', 'Overdubbing'].includes(t.state),
+      )
+    )
+      throw new Error('Finish recording before importing.');
+    if (file.size > 96 * 1024 * 1024)
+      throw new Error('Session ZIP exceeds 96 MiB.');
+    const port = session.node.port,
+      token = ++this.exportSequence;
+    let canceled = false,
+      committing = false;
+    const cancellation = new AbortController();
+    let rejectWait: (() => void) | undefined;
+    let rejectRequest: ((error: Error) => void) | undefined;
+    const sendCancellation = () => {
+      try {
+        port.postMessage({ type: 'import-cancel', token });
+      } catch {
+        /* Cleanup must survive port failure. */
+      }
+    };
+    const cancel = (force = false) => {
+      if (committing && !force) return;
+      canceled = true;
+      cancellation.abort();
+      rejectWait?.();
+      sendCancellation();
+      rejectRequest?.(new Error('Import canceled.'));
+    };
+    this.cancelImport = () => cancel(true);
+    this.importOwner = session;
+    const check = () => {
+      if (
+        canceled ||
+        options.signal?.aborted ||
+        this.session !== session ||
+        this.snapshot.status !== 'ready' ||
+        session.switching
+      )
+        throw new Error('Import canceled.');
+    };
+    const request = (
+      type: string,
+      fields: Record<string, unknown> = {},
+      requestId = ++this.exportSequence,
+    ) => {
+      check();
+      return new Promise<ImportReply>((resolve, reject) => {
+        const timer = setTimeout(
+          () => finish(new Error('Import transfer timed out. Try again.')),
+          30000,
+        );
+        const finish = (error?: Error, reply?: ImportReply) => {
+          clearTimeout(timer);
+          this.importReply = null;
+          rejectRequest = undefined;
+          if (error) reject(error);
+          else resolve(reply!);
+        };
+        rejectRequest = (error) => finish(error);
+        this.importReply = (reply) => {
+          if (reply.requestId === requestId)
+            finish(reply.error ? new Error(reply.error) : undefined, reply);
+        };
+        try {
+          port.postMessage({ type, token, requestId, ...fields });
+        } catch {
+          finish(new Error('Import transfer failed. Try again.'));
+        }
+      });
+    };
+    const wait = async <T>(promise: Promise<T>): Promise<T> => {
+      check();
+      const canceledWait = new Promise<T>((_, reject) => {
+        rejectWait = () => reject(new Error('Import canceled.'));
+      });
+      try {
+        return await Promise.race([promise, canceledWait]);
+      } finally {
+        rejectWait = undefined;
+      }
+    };
+    const abort = () => cancel();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const start = await request('import-begin', {}, token);
+      const parsed = await parseSession(
+        await wait(file.arrayBuffer()),
+        session.context.sampleRate,
+        check,
+      );
+      await request('import-configure', { manifest: parsed.manifest });
+      const total = parsed.manifest.tracks.reduce(
+        (sum, t) => sum + t.lengthSamples,
+        0,
+      );
+      let copied = 0;
+      for (const track of parsed.manifest.tracks) {
+        for (let offset = 0; offset < track.lengthSamples; offset += 2048) {
+          const samples = parsed.read(
+            track.id,
+            offset,
+            Math.min(2048, track.lengthSamples - offset),
+          );
+          await request('import-write', { trackId: track.id, offset, samples });
+          copied += samples.length;
+          options.onProgress?.(total ? copied / total : 1);
+        }
+      }
+      check();
+      if (start.hasRecordings) {
+        const confirmed = await wait(
+          options.confirmReplace(cancellation.signal),
+        );
+        if (!confirmed) {
+          check();
+          return false;
+        }
+      }
+      check();
+      options.onCommitting?.();
+      // Commit is the linearization point. Cancellation is available until dispatch.
+      const committed = request('import-commit');
+      committing = true;
+      await committed;
+      if (
+        this.session !== session ||
+        this.snapshot.status !== 'ready' ||
+        session.switching
+      )
+        throw new Error(
+          'Import interrupted. Reinitialize audio before retrying.',
+        );
+      return true;
+    } catch (error) {
+      if (
+        error instanceof RangeError ||
+        (error instanceof DOMException && error.name === 'QuotaExceededError')
+      )
+        throw new Error(
+          'Not enough memory to import this session. Free memory and retry. Your recordings are unchanged.',
+          { cause: error },
+        );
+      throw error;
+    } finally {
+      options.signal?.removeEventListener('abort', abort);
+      this.cancelImport = null;
+      this.importOwner = null;
+      this.importReply = null;
+      rejectWait = undefined;
+      cancellation.abort();
       sendCancellation();
     }
   }

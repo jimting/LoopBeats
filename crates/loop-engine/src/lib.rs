@@ -59,10 +59,26 @@ struct Track {
     captured: usize,
 }
 pub struct LoopEngine {
+    command_revision: u32,
+    staging: [Track; 2],
+    import: Option<(ImportMetadata, u32, [usize; 2])>,
     master_gain: f32,
     monitoring: bool,
     tracks: [Track; 2],
     transport: Transport,
+}
+#[derive(Clone, Copy)]
+pub struct ImportTrack {
+    pub length: usize,
+    pub mode: PlaybackMode,
+    pub gain: f32,
+    pub muted: bool,
+}
+#[derive(Clone, Copy)]
+pub struct ImportMetadata {
+    pub cycle_length: usize,
+    pub master_gain: f32,
+    pub tracks: [ImportTrack; 2],
 }
 impl Default for LoopEngine {
     fn default() -> Self {
@@ -80,7 +96,23 @@ impl LoopEngine {
     /// Allocate capture storage during initialization, never processing.
     pub fn with_capacity(samples: usize) -> Self {
         assert!(samples > 0);
+        let bank = || {
+            std::array::from_fn(|_| Track {
+                revision: 0,
+                muted: false,
+                gain: 1.0,
+                mode: PlaybackMode::Loop,
+                one_shot_position: 0,
+                recording: LoopBuffer::new(samples),
+                state: TrackState::Empty,
+                length: 0,
+                captured: 0,
+            })
+        };
         Self {
+            command_revision: 0,
+            staging: bank(),
+            import: None,
             master_gain: 1.0,
             monitoring: false,
             tracks: std::array::from_fn(|_| Track {
@@ -97,11 +129,107 @@ impl LoopEngine {
             transport: Transport::default(),
         }
     }
+    pub fn command_revision(&self) -> u32 {
+        self.command_revision
+    }
+    fn mutate(&mut self) {
+        self.command_revision = self.command_revision.saturating_add(1);
+    }
+    pub fn cancel_import(&mut self) {
+        self.import = None;
+    }
+    pub fn begin_import(&mut self, metadata: ImportMetadata, revision: u32) -> bool {
+        self.import = None;
+        let capacity = self.tracks[0].recording.capacity();
+        if revision == u32::MAX
+            || revision != self.command_revision
+            || metadata.cycle_length > capacity
+            || !(0.0..=1.0).contains(&metadata.master_gain)
+            || self
+                .tracks
+                .iter()
+                .any(|t| matches!(t.state, TrackState::Recording | TrackState::Overdubbing))
+            || metadata.tracks.iter().any(|t| {
+                t.length > capacity
+                    || !(0.0..=1.0).contains(&t.gain)
+                    || (t.length > 0
+                        && t.mode == PlaybackMode::Loop
+                        && t.length != metadata.cycle_length)
+            })
+            || self
+                .staging
+                .iter()
+                .any(|t| !t.recording.can_begin_capture())
+        {
+            return false;
+        }
+        for track in &mut self.staging {
+            track.recording.begin_capture();
+        }
+        self.import = Some((metadata, revision, [0; 2]));
+        true
+    }
+    pub fn write_import(&mut self, id: usize, offset: usize, samples: &[f32]) -> bool {
+        let Some((metadata, revision, received)) = &mut self.import else {
+            return false;
+        };
+        if id >= 2
+            || *revision != self.command_revision
+            || samples.is_empty()
+            || samples.len() > 2048
+            || offset != received[id]
+            || offset > metadata.tracks[id].length
+            || samples.len() > metadata.tracks[id].length - offset
+            || samples.iter().any(|s| !s.is_finite())
+        {
+            return false;
+        }
+        for (i, sample) in samples.iter().enumerate() {
+            self.staging[id].recording.write(offset + i, *sample);
+        }
+        received[id] += samples.len();
+        true
+    }
+    pub fn commit_import(&mut self) -> bool {
+        let Some((metadata, revision, received)) = self.import else {
+            return false;
+        };
+        if revision != self.command_revision || received != metadata.tracks.map(|t| t.length) {
+            return false;
+        }
+        for (id, config) in metadata.tracks.iter().enumerate() {
+            let track = &mut self.staging[id];
+            track.revision = self.tracks[id].revision.saturating_add(1);
+            track.length = config.length;
+            track.captured = config.length;
+            track.mode = config.mode;
+            track.gain = config.gain;
+            track.muted = config.muted;
+            track.one_shot_position = 0;
+            track.state = if config.length == 0 {
+                TrackState::Empty
+            } else {
+                TrackState::Stopped
+            };
+        }
+        std::mem::swap(&mut self.tracks, &mut self.staging);
+        self.transport = Transport {
+            cycle_length: metadata.cycle_length,
+            ..Transport::default()
+        };
+        self.master_gain = metadata.master_gain;
+        self.monitoring = false;
+        self.import = None;
+        self.mutate();
+        true
+    }
     pub fn set_monitoring(&mut self, enabled: bool) {
+        self.mutate();
         self.monitoring = enabled;
     }
     /// Linear volume controls accept finite values from silence (0) to unity (1).
     pub fn set_track_gain(&mut self, track_id: usize, gain: f32) {
+        self.mutate();
         if (0.0..=1.0).contains(&gain) {
             if let Some(track) = self.tracks.get_mut(track_id) {
                 track.gain = gain;
@@ -109,11 +237,13 @@ impl LoopEngine {
         }
     }
     pub fn set_track_mute(&mut self, track_id: usize, muted: bool) {
+        self.mutate();
         if let Some(track) = self.tracks.get_mut(track_id) {
             track.muted = muted;
         }
     }
     pub fn set_master_gain(&mut self, gain: f32) {
+        self.mutate();
         if (0.0..=1.0).contains(&gain) {
             self.master_gain = gain;
         }
@@ -152,6 +282,7 @@ impl LoopEngine {
     }
     /// Select capture mode or convert a stopped recording without changing its samples.
     pub fn set_mode(&mut self, track_id: usize, mode: PlaybackMode) {
+        self.mutate();
         let Some(availability) = self.snapshot().tracks.get(track_id).copied() else {
             return;
         };
@@ -165,6 +296,7 @@ impl LoopEngine {
     }
     /// Invalid track indices and unavailable commands are ignored by the engine.
     pub fn record(&mut self, track_id: usize) {
+        self.mutate();
         if track_id >= self.tracks.len() || !self.snapshot().tracks[track_id].can_record {
             return;
         }
@@ -221,6 +353,7 @@ impl LoopEngine {
         };
     }
     pub fn stop_track(&mut self, track_id: usize) {
+        self.mutate();
         let Some(track) = self.tracks.get_mut(track_id) else {
             return;
         };
@@ -231,6 +364,7 @@ impl LoopEngine {
         }
     }
     pub fn play(&mut self, track_id: usize) {
+        self.mutate();
         if track_id >= self.tracks.len() || !self.snapshot().tracks[track_id].can_play {
             return;
         }
@@ -247,6 +381,7 @@ impl LoopEngine {
     }
     /// Remove a recording in constant time; fresh capture invalidates old storage lazily.
     pub fn clear(&mut self, track_id: usize) {
+        self.mutate();
         if let Some(track) = self.tracks.get_mut(track_id) {
             track.revision = track.revision.saturating_add(1);
             track.state = TrackState::Empty;
@@ -257,6 +392,7 @@ impl LoopEngine {
     }
     /// Start a fresh audio workspace while retaining volume, mute and mode preferences.
     pub fn reset(&mut self) {
+        self.mutate();
         for track_id in 0..self.tracks.len() {
             self.clear(track_id);
         }
@@ -265,10 +401,12 @@ impl LoopEngine {
     }
     /// Stop safely for an input/context interruption without losing completed audio.
     pub fn interrupt(&mut self) {
+        self.mutate();
         self.stop_transport();
         self.monitoring = false;
     }
     pub fn stop_transport(&mut self) {
+        self.mutate();
         for track in &mut self.tracks {
             track.one_shot_position = 0;
             match track.state {
@@ -414,6 +552,7 @@ impl LoopEngine {
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
+    use super::{ImportMetadata, ImportTrack};
     use super::{LoopEngine, PlaybackMode};
     const CAPACITY: usize = 2048;
     static mut INPUT: [f32; CAPACITY] = [0.0; CAPACITY];
@@ -658,6 +797,77 @@ mod wasm {
     #[no_mangle]
     pub extern "C" fn input_ptr() -> *mut f32 {
         core::ptr::addr_of_mut!(INPUT).cast()
+    }
+    #[no_mangle]
+    pub extern "C" fn command_revision() -> u32 {
+        with_engine(|e| e.command_revision())
+    }
+    #[no_mangle]
+    pub extern "C" fn import_begin(
+        revision: u32,
+        cycle: usize,
+        master: f32,
+        length0: usize,
+        mode0: u32,
+        gain0: f32,
+        mute0: u32,
+        length1: usize,
+        mode1: u32,
+        gain1: f32,
+        mute1: u32,
+    ) -> u32 {
+        if mode0 > 1 || mode1 > 1 || mute0 > 1 || mute1 > 1 {
+            return 0;
+        }
+        with_engine(|e| {
+            e.begin_import(
+                ImportMetadata {
+                    cycle_length: cycle,
+                    master_gain: master,
+                    tracks: [
+                        ImportTrack {
+                            length: length0,
+                            mode: if mode0 == 0 {
+                                PlaybackMode::Loop
+                            } else {
+                                PlaybackMode::OneShot
+                            },
+                            gain: gain0,
+                            muted: mute0 != 0,
+                        },
+                        ImportTrack {
+                            length: length1,
+                            mode: if mode1 == 0 {
+                                PlaybackMode::Loop
+                            } else {
+                                PlaybackMode::OneShot
+                            },
+                            gain: gain1,
+                            muted: mute1 != 0,
+                        },
+                    ],
+                },
+                revision,
+            ) as u32
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn import_write(id: usize, offset: usize, frames: usize) -> u32 {
+        if frames > CAPACITY {
+            return 0;
+        }
+        // SAFETY: fixed input buffer and a single serialized worklet owner.
+        with_engine(|e| unsafe {
+            e.write_import(id, offset, core::slice::from_raw_parts(input_ptr(), frames)) as u32
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn import_commit() -> u32 {
+        with_engine(|e| e.commit_import() as u32)
+    }
+    #[no_mangle]
+    pub extern "C" fn import_cancel() {
+        with_engine(|e| e.cancel_import());
     }
     #[no_mangle]
     pub extern "C" fn output_ptr() -> *mut f32 {

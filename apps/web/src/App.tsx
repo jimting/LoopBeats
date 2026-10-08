@@ -3,6 +3,7 @@ import type { TrackId } from '@loopbeats/domain';
 import { AudioClient } from '@loopbeats/audio-client';
 import { TrackStrip } from './TrackStrip';
 import { SessionExport } from './SessionExport';
+import { SessionImport } from './SessionImport';
 
 type Removal = { kind: 'track'; trackId: TrackId } | { kind: 'session' };
 type InputDevice = { id: string; label: string };
@@ -73,6 +74,7 @@ function writeSettings(settings: StoredSettings): void {
 }
 
 export function App() {
+  const [sessionBusy, setSessionBusy] = useState(false);
   const [storedSettings] = useState(readSettings);
   const [confirmClearing, setConfirmClearing] = useState(
     () => storedSettings?.confirmClearing ?? true,
@@ -374,10 +376,24 @@ export function App() {
           <summary>Settings</summary>
           <SessionExport
             client={client}
+            onBusy={setSessionBusy}
             enabled={
               ready &&
+              !sessionBusy &&
               !switchPending &&
               !snapshot.tracks.some((track) => track.state === 'Overdubbing')
+            }
+          />
+          <SessionImport
+            client={client}
+            onBusy={setSessionBusy}
+            enabled={
+              ready &&
+              !sessionBusy &&
+              !switchPending &&
+              !snapshot.tracks.some((t) =>
+                ['Recording', 'Overdubbing'].includes(t.state),
+              )
             }
           />
           <section aria-labelledby="settings-heading">
