@@ -16,6 +16,17 @@ test.use({
     ],
   },
 });
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    const original = window.AudioContext;
+    window.AudioContext = class extends original {
+      constructor(options?: AudioContextOptions) {
+        // Fixture WAVs have a known rate; browser/OS defaults vary (CI uses 44.1 kHz).
+        super({ sampleRate: 48000, ...options });
+      }
+    };
+  });
+});
 async function archive(rate = 48000, length = 3) {
   const manifest: ExportManifest = {
     format: 'LoopBeatsSession',

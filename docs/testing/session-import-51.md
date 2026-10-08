@@ -54,6 +54,10 @@ TypeScript, ESLint, Cargo formatting/check/clippy and
 production/WASM builds pass. Whole-repository Prettier with end-of-line auto
 passes; the existing Windows checkout CRLF issue remains unrelated.
 Browser verification is recorded in the PR's final-head CI results.
+The first web CI run used a 44.1 kHz host default and correctly rejected the
+48 kHz fixture archives. Import fixtures now explicitly select a real 48 kHz
+AudioContext; explicit 192 kHz capacity and different-rate rejection remain
+covered. Product sample-rate behavior was unchanged.
 
 Initial two-axis review identified confirmation lifecycle settlement, commit
 teardown, stale-token ownership and missing round-trip/fault evidence. Fixes and
