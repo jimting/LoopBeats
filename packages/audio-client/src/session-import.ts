@@ -1,4 +1,5 @@
 import type { ExportManifest } from './session-export';
+import { fitsImportMemory, SESSION_AUDIO_BYTES } from './session-limits';
 
 const LIMIT = 96 * 1024 * 1024;
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -35,6 +36,7 @@ export async function parseSession(
   buffer: ArrayBuffer,
   rate: number,
   check: () => void = () => {},
+  allowDifferentRate = false,
 ) {
   check();
   if (buffer.byteLength < 22 || buffer.byteLength > LIMIT) invalid();
@@ -204,18 +206,26 @@ export async function parseSession(
     }
     waves.push(w);
   }
-  if (total > 92160000 || files.size !== 1 + waves.filter(Boolean).length)
+  if (
+    total > SESSION_AUDIO_BYTES ||
+    files.size !== 1 + waves.filter(Boolean).length
+  )
     invalid();
   // Reserved bank (4.25 bytes/frame), file and one bounded copy remain below 384 MiB.
-  if (buffer.byteLength + rate * 60 * 2 * 4.25 + 8192 > 384 * 1024 * 1024)
-    invalid();
-  if (manifest.sampleRate !== rate)
+  if (!fitsImportMemory(buffer.byteLength, rate, 8192)) invalid();
+  if (manifest.sampleRate !== rate && !allowDifferentRate)
     throw new Error(
       `Session sample rate is ${manifest.sampleRate} Hz; current audio is ${rate} Hz. Sample-rate conversion is not available yet. The current session is unchanged.`,
     );
   check();
   return {
+    byteLength: buffer.byteLength,
     manifest,
+    recording(id: number): (position: number) => number {
+      const wave = waves[id];
+      if (!wave) invalid();
+      return (position) => wave.getFloat32(56 + position * 4, true);
+    },
     read(id: number, offset: number, frames: number) {
       const wave = waves[id];
       if (
