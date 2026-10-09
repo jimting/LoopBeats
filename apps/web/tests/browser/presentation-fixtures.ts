@@ -39,6 +39,7 @@ export async function showPresentation(
     ({ tracks, status }) => {
       const fixture = {
         type: 'snapshot',
+        recordingRevisions: [0, 0],
         failed: false,
         processedFrames: 48000,
         monitoring: false,

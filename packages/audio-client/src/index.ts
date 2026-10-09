@@ -10,6 +10,7 @@ export type { AudioSnapshot } from '@loopbeats/domain';
 import { assembleSession, type ExportReply } from './session-export';
 import { parseSession } from './session-import';
 import { convertSession } from './session-conversion';
+import { SessionRecovery, type RecoveryState } from './session-recovery';
 type ImportReply = {
   type: 'import-reply';
   requestId: number;
@@ -34,6 +35,7 @@ type Session = {
   switchToken?: number;
 };
 type WorkletSnapshot = {
+  recordingRevisions: number[];
   masterGain: number;
   type: 'snapshot';
   transport: TransportSnapshot;
@@ -103,6 +105,55 @@ export class AudioClient {
   private cancelImport: (() => void) | null = null;
   private importOwner: Session | null = null;
   private importReply: ((reply: ImportReply) => void) | null = null;
+  private recoverySession?: SessionRecovery;
+  private recordingRevisions: number[] = [];
+  private recoveryInitialization?: Promise<void>;
+  private readonly noRecovery: RecoveryState = {
+    status: 'Recovery disabled.',
+    owner: false,
+    offer: null,
+    savedAt: null,
+    error: null,
+    offerVisible: true,
+  };
+  getRecoverySnapshot = (): RecoveryState =>
+    this.recoverySession?.getSnapshot() ?? this.noRecovery;
+  enableRecovery(): () => void {
+    this.recoverySession ??= new SessionRecovery({
+      snapshot: this.getSnapshot,
+      available: () =>
+        !this.cancelExport && !this.cancelImport && !this.session?.switching,
+      export: (signal) => this.captureSession({ signal }),
+      notify: () => {
+        for (const listener of this.listeners) listener();
+      },
+    });
+    this.recoveryInitialization = this.recoverySession.initialize();
+    return () => this.recoverySession?.dispose();
+  }
+  async discardRecovery(): Promise<void> {
+    await this.recoverySession?.discard();
+  }
+  async recoverSession(
+    options: Parameters<AudioClient['importSession']>[1],
+  ): Promise<boolean> {
+    const archive = this.recoverySession?.archiveForRecovery();
+    if (!archive) throw new Error('No valid recovery snapshot is available.');
+    return this.restoreSession(archive, options, true);
+  }
+  async retryRecoveryOwnership(): Promise<void> {
+    await this.recoverySession?.initialize();
+  }
+  retryRecoverySaving(): void {
+    this.recoverySession?.retry();
+  }
+  showRecoveryOffer(visible: boolean): void {
+    this.recoverySession?.showOffer(visible);
+  }
+  private async deletionBarrier(): Promise<void> {
+    await this.recoveryInitialization;
+    await this.recoverySession?.beforeDestructive();
+  }
   constructor(private assets: { wasm: string; worklet: string }) {}
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {
@@ -113,6 +164,7 @@ export class AudioClient {
   };
   private publish(snapshot: AudioSnapshot) {
     this.snapshot = snapshot;
+    this.recoverySession?.observe(snapshot, this.recordingRevisions);
     for (const listener of this.listeners) listener();
   }
   private disconnectInput(session: Session) {
@@ -308,6 +360,7 @@ export class AudioClient {
             return;
           }
           if (data.processedFrames > 0) {
+            this.recordingRevisions = data.recordingRevisions;
             const recovered =
               current.recovering &&
               current.recoveryAfterFrames !== undefined &&
@@ -542,6 +595,15 @@ export class AudioClient {
       onProgress?: (fraction: number) => void;
     } = {},
   ): Promise<Blob> {
+    await this.recoverySession?.yieldToUser();
+    return this.captureSession(options);
+  }
+  private async captureSession(
+    options: {
+      signal?: AbortSignal;
+      onProgress?: (fraction: number) => void;
+    } = {},
+  ): Promise<Blob> {
     const session = this.session;
     if (this.snapshot.status !== 'ready' || !session?.node || session.switching)
       throw new Error('Start audio before exporting.');
@@ -658,6 +720,14 @@ export class AudioClient {
       ) => Promise<boolean>;
     },
   ): Promise<boolean> {
+    return this.restoreSession(file, options);
+  }
+  private async restoreSession(
+    file: Blob,
+    options: Parameters<AudioClient['importSession']>[1],
+    retainRecovery = false,
+  ): Promise<boolean> {
+    await this.recoverySession?.yieldToUser();
     const session = this.session;
     if (this.snapshot.status !== 'ready' || !session?.node || session.switching)
       throw new Error('Start audio before importing.');
@@ -811,6 +881,9 @@ export class AudioClient {
         }
       }
       check();
+      if (!retainRecovery) await this.deletionBarrier();
+      else this.recoverySession?.requireOwner();
+      check();
       options.onCommitting?.();
       // Commit is the linearization point. Cancellation is available until dispatch.
       const committed = request('import-commit');
@@ -824,6 +897,7 @@ export class AudioClient {
         throw new Error(
           'Import interrupted. Reinitialize audio before retrying.',
         );
+      if (retainRecovery) this.recoverySession?.recovered();
       return true;
     } catch (error) {
       if (
@@ -849,11 +923,13 @@ export class AudioClient {
     if (this.snapshot.status === 'ready')
       this.session?.node?.port.postMessage(command);
   }
-  clear(trackId: TrackId): void {
-    this.command({ type: 'clear', trackId });
+  async clear(trackId: TrackId): Promise<void> {
+    await this.destructiveAction(() =>
+      this.command({ type: 'clear', trackId }),
+    );
   }
-  reset(): void {
-    this.command({ type: 'reset' });
+  async reset(): Promise<void> {
+    await this.destructiveAction(() => this.command({ type: 'reset' }));
   }
   setTrackGain(trackId: TrackId, gain: number): void {
     this.command({ type: 'set-track-gain', trackId, gain });
@@ -881,6 +957,22 @@ export class AudioClient {
   }
   startTracks(): void {
     this.command({ type: 'start-tracks' });
+  }
+  async discardSession(): Promise<void> {
+    await this.destructiveAction(() => this.stop());
+  }
+  private async destructiveAction(
+    action: () => void | Promise<void>,
+  ): Promise<void> {
+    const session = this.session,
+      attempt = this.attempt;
+    try {
+      await this.deletionBarrier();
+      if (session !== this.session || attempt !== this.attempt) return;
+      await action();
+    } catch (error) {
+      this.recoverySession?.report(error);
+    }
   }
   async stop(): Promise<void> {
     const attempt = ++this.attempt;

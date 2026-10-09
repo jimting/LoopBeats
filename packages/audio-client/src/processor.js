@@ -314,6 +314,9 @@ class LoopProcessor extends AudioWorkletProcessor {
   publishSnapshot() {
     this.port.postMessage({
       type: 'snapshot',
+      recordingRevisions: [0, 1].map((id) =>
+        this.engine.recording_revision(id),
+      ),
       masterGain: this.engine.master_gain(),
       failed: this.failed,
       monitoring: Boolean(this.engine.monitoring()),

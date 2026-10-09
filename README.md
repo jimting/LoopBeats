@@ -107,8 +107,7 @@ contains a versioned session manifest and mono float32 WAVs for completed
 recordings, preserving raw audio, modes, gain/mute, master gain and shared-cycle
 alignment. Unfinished initial recordings are excluded; finish overdub before
 exporting. Playback can continue. Cancel or failure leaves the live session
-unchanged. This slice provides export only; import and automatic recovery follow
-in #51–#54. See [the export contract](docs/specs/session-export-50.md).
+unchanged. See [the export contract](docs/specs/session-export-50.md).
 
 ## Session import (#51, #52)
 
@@ -125,6 +124,29 @@ content. Conversion starts only after you accept, followed by replacement
 confirmation when recordings exist. Unsupported files and canceled or failed
 imports leave the session unchanged. See [the import contract](docs/specs/session-import-51.md)
 and [the conversion contract](docs/specs/session-conversion-52.md).
+
+## Completed-session recovery (#53)
+
+Completed recordings and session configuration are checkpointed automatically
+in this browser. Changes coalesce for one second, with a five-second scheduling
+target when eligible. Playback continues; active overdub postpones saving until
+it finishes, and unfinished initial capture is excluded. The last successful
+snapshot survives a failed write. Recovery status and the saved time are visible.
+
+After reload, review the recovery offer and explicitly **Start audio** and
+**Recover session** to restore Stopped tracks at transport zero with monitoring
+off. Rate conversion and replacement use the usual confirmations. **Later**
+retains the offer under Settings and pauses saving until recovery or explicit
+discard. One tab owns recovery; other tabs can use live audio without overwriting
+its snapshot. Retry ownership after the owner closes.
+
+CLEAR, reset, Stop audio—discard session, and accepted import replacement delete
+the current workspace's old checkpoint before changing live recordings. CLEAR
+then saves the remaining tracks; a crash before that save can lose their recovery.
+A pending recovery offer from a previous workspace is preserved until explicitly
+recovered or discarded. Browser storage can be cleared, and a crash can lose
+changes newer than the last successful snapshot: export ZIPs for portable backup.
+See [the recovery contract](docs/specs/session-recovery-53.md).
 
 ## Rust/WASM audio experiment (#6)
 

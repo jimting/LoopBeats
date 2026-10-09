@@ -109,6 +109,17 @@ export function App() {
       }),
   );
   const snapshot = useSyncExternalStore(client.subscribe, client.getSnapshot);
+  const recovery = useSyncExternalStore(
+    client.subscribe,
+    client.getRecoverySnapshot,
+  );
+  useEffect(() => {
+    if (!recovery.offer || !recovery.offerVisible) return;
+    const settings = document
+      .getElementById('recovery-heading')
+      ?.closest('details');
+    if (settings) settings.open = true;
+  }, [recovery.offer, recovery.offerVisible]);
   const loadInputDevices = async (): Promise<readonly InputDevice[]> => {
     if (!navigator.mediaDevices?.enumerateDevices) return [];
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -178,18 +189,25 @@ export function App() {
     return () => window.removeEventListener('beforeunload', warnIfRecording);
   }, [snapshot.tracks]);
   useEffect(() => {
+    const disableRecovery = client.enableRecovery();
     const release = () => {
+      disableRecovery();
       void client.stop();
     };
+    const resume = () => {
+      client.enableRecovery();
+    };
     window.addEventListener('pagehide', release);
+    window.addEventListener('pageshow', resume);
     return () => {
       window.removeEventListener('pagehide', release);
+      window.removeEventListener('pageshow', resume);
       release();
     };
   }, [client]);
   const remove = (target: Removal) => {
-    if (target.kind === 'track') client.clear(target.trackId);
-    else client.reset();
+    if (target.kind === 'track') void client.clear(target.trackId);
+    else void client.reset();
     // The confirmed action may disable its trigger when the engine replies.
     // Return to the disclosure so focus survives that asynchronous update.
     removalTrigger.current =
@@ -230,11 +248,33 @@ export function App() {
         </div>
         <p className="intro">Build a performance, one layer at a time.</p>
       </header>
+      {recovery.offer && recovery.offerVisible && (
+        <aside aria-label="Recovery available">
+          <p>
+            A recovery snapshot is available from{' '}
+            {new Date(recovery.offer.savedAt).toLocaleString()}. Your live
+            session has not been replaced.
+          </p>
+          <button
+            onClick={() => {
+              const section = document.getElementById('recovery-heading');
+              const settings = section?.closest('details');
+              if (settings) settings.open = true;
+              section?.scrollIntoView();
+            }}
+          >
+            Review recovery
+          </button>
+        </aside>
+      )}
       <section className="instrument" aria-labelledby="status-heading">
         <div className="master-strip">
           <div className="session-status">
             <h2 id="status-heading">Audio session</h2>
             <p role="status">{status}</p>
+            <p className="session-guidance" aria-live="polite">
+              Recovery: {recovery.status} {recovery.error}
+            </p>
             {snapshot.error && <p role="alert">{snapshot.error}</p>}
             <p className="session-guidance">
               Use wired headphones. Monitoring starts off.
@@ -263,7 +303,7 @@ export function App() {
                   !ready && !starting && snapshot.status !== 'interrupted'
                 }
                 onClick={() => {
-                  void client.stop();
+                  void client.discardSession();
                 }}
               >
                 {snapshot.status === 'recovering'
