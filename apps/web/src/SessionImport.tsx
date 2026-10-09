@@ -119,17 +119,27 @@ export function SessionImport({
           </p>
         )}
         <p>
-          Only completed recordings are saved. Finish overdub to save its
-          additions. Crashes may lose newer changes; browser storage may be
-          cleared. Export a session ZIP for a portable backup.
+          Recordings and overdubs are checkpointed every five seconds while
+          active. Saved audio represents the checkpoint start, not the later
+          save time. Delays or crashes may lose newer changes; browser storage
+          may be cleared. Export a session ZIP for a portable backup.
         </p>
         <p>
-          CLEAR and replacement remove the previous recovery snapshot first.
-          Remaining recordings are protected again after the next successful
-          save.
+          CLEAR, replacement and global STOP during initial recording remove the
+          previous recovery snapshot first. Remaining recordings are protected
+          again after the next successful save.
         </p>
         {recovery.offer && !later && (
           <>
+            {recovery.offer.progress?.captureKinds.some(
+              (kind) => kind !== null,
+            ) && (
+              <p>
+                Recovery contains partial recording or overdub audio frozen at{' '}
+                {new Date(recovery.offer.progress.startedAt).toLocaleString()}.
+                Recorded tracks open stopped; capture never resumes.
+              </p>
+            )}
             <button onClick={() => setLater(true)}>Later</button>
             <button
               disabled={!enabled || progress !== null || !recovery.owner}

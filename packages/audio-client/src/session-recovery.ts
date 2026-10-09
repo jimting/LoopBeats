@@ -1,23 +1,37 @@
 import type { AudioSnapshot } from '@loopbeats/domain';
 
 const NAME = 'loopbeats.recovery.v1';
+const CAPTURE_KINDS = [
+  'FirstLoop',
+  'JoinedLoop',
+  'OneShot',
+  'Overdub',
+] as const;
+type CaptureKind = (typeof CAPTURE_KINDS)[number];
+export type CheckpointInfo = {
+  startedAt: number;
+  captureKinds: (null | CaptureKind)[];
+};
 export type RecoveryRecord = {
   version: 1;
   savedAt: number;
   revision: number;
   archive: Blob;
+  progress?: CheckpointInfo;
 };
 export type RecoveryState = {
   status: string;
   owner: boolean;
-  offer: Pick<RecoveryRecord, 'savedAt' | 'revision'> | null;
+  offer: Pick<RecoveryRecord, 'savedAt' | 'revision' | 'progress'> | null;
   savedAt: number | null;
   error: string | null;
   offerVisible: boolean;
 };
 type Host = {
   snapshot(): AudioSnapshot;
-  export(signal: AbortSignal): Promise<Blob>;
+  checkpoint(
+    signal: AbortSignal,
+  ): Promise<{ archive: Blob; progress: CheckpointInfo }>;
   available(): boolean;
   notify(): void;
 };
@@ -108,6 +122,18 @@ export class RecoveryStorage {
       !Number.isSafeInteger(value.revision) ||
       value.revision < 1 ||
       !(value.archive instanceof Blob) ||
+      (value.progress !== undefined &&
+        (!value.progress ||
+          Object.keys(value.progress).length !== 2 ||
+          !Number.isSafeInteger(value.progress.startedAt) ||
+          value.progress.startedAt < 0 ||
+          value.progress.startedAt > value.savedAt ||
+          !Array.isArray(value.progress.captureKinds) ||
+          value.progress.captureKinds.length !== 2 ||
+          Object.keys(value.progress.captureKinds).length !== 2 ||
+          value.progress.captureKinds.some(
+            (kind) => kind !== null && !CAPTURE_KINDS.includes(kind),
+          ))) ||
       value.archive.size > 96 * 1024 * 1024
     )
       throw new Error(
@@ -153,6 +179,7 @@ export class SessionRecovery {
   private disabled = false;
   private unresolved = true;
   private retryAfter = 0;
+  private progressDue = 0;
   private offeredRecord: RecoveryRecord | null = null;
   constructor(
     private host: Host,
@@ -219,7 +246,11 @@ export class SessionRecovery {
             this.revision = record?.revision ?? 0;
             this.publish({
               offer: record
-                ? { savedAt: record.savedAt, revision: record.revision }
+                ? {
+                    savedAt: record.savedAt,
+                    revision: record.revision,
+                    progress: record.progress,
+                  }
                 : null,
               offerVisible: true,
               savedAt: record?.savedAt ?? null,
@@ -267,6 +298,14 @@ export class SessionRecovery {
       this.operation?.abort();
       return;
     }
+    const active = snapshot.tracks.some(
+      (t) => t.state === 'Recording' || t.state === 'Overdubbing',
+    );
+    if (active && !this.progressDue) this.progressDue = Date.now() + 5000;
+    if (!active && this.progressDue) {
+      this.progressDue = 0;
+      this.markDirty();
+    }
     const key = JSON.stringify([
       snapshot.sampleRate,
       snapshot.masterGain,
@@ -277,21 +316,12 @@ export class SessionRecovery {
         t.muted,
         t.state === 'Recording' ? 0 : t.lengthSamples,
         revisions[id] ?? 0,
+        t.state === 'Recording' || t.state === 'Overdubbing',
       ]),
     ]);
     if (key !== this.key) {
       this.key = key;
       this.markDirty();
-    }
-    if (snapshot.tracks.some((t) => t.state === 'Overdubbing')) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
-      this.operation?.abort();
-      if (this.state.owner && !this.unresolved)
-        this.publish({
-          status: 'Paused during overdub; current overdub is not saved.',
-        });
-      return;
     }
     this.schedule();
   }
@@ -305,15 +335,14 @@ export class SessionRecovery {
   }
   private schedule(delay?: number): void {
     if (
-      !this.dirty ||
+      (!this.dirty && !this.progressDue) ||
       this.timer ||
       this.operation ||
       this.barrier ||
       !this.state.owner ||
       this.unresolved ||
       !this.host.available() ||
-      this.host.snapshot().status !== 'ready' ||
-      this.host.snapshot().tracks.some((t) => t.state === 'Overdubbing')
+      this.host.snapshot().status !== 'ready'
     )
       return;
     this.timer = setTimeout(
@@ -325,7 +354,9 @@ export class SessionRecovery {
       Math.max(
         this.retryAfter - Date.now(),
         delay ??
-          Math.max(0, Math.min(1000, this.firstDirty + 5000 - Date.now())),
+          (this.progressDue
+            ? Math.max(0, this.progressDue - Date.now())
+            : Math.max(0, Math.min(1000, this.firstDirty + 5000 - Date.now()))),
       ),
     );
   }
@@ -346,7 +377,10 @@ export class SessionRecovery {
     this.publish({ status: 'Saving…', error: null });
     let failed = false;
     try {
-      const archive = await this.host.export(controller.signal);
+      const { archive, progress } = await this.host.checkpoint(
+        controller.signal,
+      );
+      if (this.progressDue) this.progressDue = progress.startedAt + 5000;
       if (
         controller.signal.aborted ||
         epoch !== this.epoch ||
@@ -358,6 +392,7 @@ export class SessionRecovery {
         savedAt: Date.now(),
         revision: this.revision + 1,
         archive,
+        progress,
       };
       await this.storage.write(record, controller.signal);
       if (epoch !== this.epoch) return;
@@ -367,7 +402,7 @@ export class SessionRecovery {
         savedAt: record.savedAt,
         status: this.dirty
           ? 'Changes not yet saved.'
-          : `Saved at ${new Date(record.savedAt).toLocaleString()}.`,
+          : `Saved at ${new Date(record.savedAt).toLocaleString()}. Audio frozen at ${new Date(progress.startedAt).toLocaleString()}.`,
       });
     } catch (error) {
       this.dirty = true;

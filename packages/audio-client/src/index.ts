@@ -123,7 +123,17 @@ export class AudioClient {
       snapshot: this.getSnapshot,
       available: () =>
         !this.cancelExport && !this.cancelImport && !this.session?.switching,
-      export: (signal) => this.captureSession({ signal }),
+      checkpoint: async (signal) => {
+        let progress: import('./session-recovery').CheckpointInfo | undefined;
+        const archive = await this.captureSession(
+          { signal },
+          (captureKinds, startedAt) => {
+            progress = { startedAt, captureKinds };
+          },
+        );
+        if (!progress) throw new Error('Checkpoint metadata is unavailable.');
+        return { archive, progress };
+      },
       notify: () => {
         for (const listener of this.listeners) listener();
       },
@@ -603,6 +613,10 @@ export class AudioClient {
       signal?: AbortSignal;
       onProgress?: (fraction: number) => void;
     } = {},
+    checkpoint?: (
+      kinds: NonNullable<ExportReply['captureKinds']>,
+      startedAt: number,
+    ) => void,
   ): Promise<Blob> {
     const session = this.session;
     if (this.snapshot.status !== 'ready' || !session?.node || session.switching)
@@ -615,7 +629,10 @@ export class AudioClient {
     let rejectRequest: ((error: Error) => void) | undefined;
     const sendCancellation = () => {
       try {
-        port.postMessage({ type: 'export-cancel', token });
+        port.postMessage({
+          type: checkpoint ? 'checkpoint-cancel' : 'export-cancel',
+          token,
+        });
       } catch {
         // A failed browser port must not prevent local rejection or cleanup.
       }
@@ -660,7 +677,12 @@ export class AudioClient {
             finish(reply.error ? new Error(reply.error) : undefined, reply);
         };
         try {
-          port.postMessage({ type, token, requestId, ...fields });
+          port.postMessage({
+            type: checkpoint ? type.replace('export-', 'checkpoint-') : type,
+            token,
+            requestId,
+            ...fields,
+          });
         } catch {
           finish(new Error('Export transfer failed. Try again.'));
         }
@@ -670,6 +692,14 @@ export class AudioClient {
     try {
       const start = await request('export-begin', {}, token);
       if (!start.manifest) throw new Error('Export metadata is unavailable.');
+      if (checkpoint) {
+        if (
+          !start.captureKinds ||
+          !Number.isSafeInteger(start.checkpointStartedAt)
+        )
+          throw new Error('Checkpoint metadata is unavailable.');
+        checkpoint(start.captureKinds, start.checkpointStartedAt!);
+      }
       const blob = await assembleSession(
         start.manifest,
         async (trackId, offset, frames) => {
@@ -953,7 +983,11 @@ export class AudioClient {
     this.command({ type: 'stop-track', trackId });
   }
   stopTransport(): void {
-    this.command({ type: 'stop-transport' });
+    if (this.snapshot.tracks.some((track) => track.state === 'Recording')) {
+      void this.destructiveAction(() =>
+        this.command({ type: 'stop-transport' }),
+      );
+    } else this.command({ type: 'stop-transport' });
   }
   startTracks(): void {
     this.command({ type: 'start-tracks' });
