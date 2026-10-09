@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AudioClient } from '@loopbeats/audio-client';
 type Confirmation =
   | { kind: 'replace' }
+  | { kind: 'discard' }
   | { kind: 'conversion'; sourceRate: number; targetRate: number };
 
 export function SessionImport({
@@ -21,6 +22,12 @@ export function SessionImport({
   const [committing, setCommitting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const recovery = useSyncExternalStore(
+    client.subscribe,
+    client.getRecoverySnapshot,
+  );
+  const later = !recovery.offerVisible;
+  const setLater = (deferred: boolean) => client.showRecoveryOffer(!deferred);
   useEffect(() => () => operation.current?.abort(), []);
   useEffect(() => {
     if (confirming) {
@@ -28,7 +35,7 @@ export function SessionImport({
       dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();
     } else if (dialog.current?.open) dialog.current.close();
   }, [confirming]);
-  const start = async (file: File) => {
+  const start = async (file?: File, discard = false) => {
     const controller = new AbortController();
     operation.current = controller;
     onBusy(true);
@@ -51,14 +58,29 @@ export function SessionImport({
         else setConfirming(details);
       });
     try {
-      const imported = await client.importSession(file, {
+      if (discard) {
+        if (await confirm(controller.signal, { kind: 'discard' })) {
+          await client.discardRecovery();
+          setLater(false);
+          setMessage('Recovery snapshot discarded.');
+        }
+        return;
+      }
+      const options = {
         signal: controller.signal,
         onProgress: setProgress,
         onCommitting: () => setCommitting(true),
-        confirmReplace: (signal) => confirm(signal, { kind: 'replace' }),
-        confirmConversion: (sourceRate, targetRate, signal) =>
-          confirm(signal, { kind: 'conversion', sourceRate, targetRate }),
-      });
+        confirmReplace: (signal: AbortSignal) =>
+          confirm(signal, { kind: 'replace' }),
+        confirmConversion: (
+          sourceRate: number,
+          targetRate: number,
+          signal: AbortSignal,
+        ) => confirm(signal, { kind: 'conversion', sourceRate, targetRate }),
+      };
+      const imported = await (file
+        ? client.importSession(file, options)
+        : client.recoverSession(options));
       setMessage(
         imported
           ? 'Session imported. Recordings are stopped; monitoring is off.'
@@ -82,6 +104,73 @@ export function SessionImport({
   };
   return (
     <section aria-labelledby="import-heading">
+      <section
+        aria-labelledby="recovery-heading"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setLater(true);
+        }}
+      >
+        <h2 id="recovery-heading">Session recovery</h2>
+        <p data-testid="recovery-status">{recovery.status}</p>
+        {recovery.savedAt !== null && (
+          <p>
+            Last successful snapshot:{' '}
+            {new Date(recovery.savedAt).toLocaleString()}.
+          </p>
+        )}
+        <p>
+          Only completed recordings are saved. Finish overdub to save its
+          additions. Crashes may lose newer changes; browser storage may be
+          cleared. Export a session ZIP for a portable backup.
+        </p>
+        <p>
+          CLEAR and replacement remove the previous recovery snapshot first.
+          Remaining recordings are protected again after the next successful
+          save.
+        </p>
+        {recovery.offer && !later && (
+          <>
+            <button onClick={() => setLater(true)}>Later</button>
+            <button
+              disabled={!enabled || progress !== null || !recovery.owner}
+              onClick={() => void start()}
+            >
+              Recover session
+            </button>
+            <p>
+              Start audio to recover. Conversion and replacement require
+              confirmation when needed.
+            </p>
+          </>
+        )}
+        {recovery.offer && later && (
+          <button onClick={() => setLater(false)}>Show recovery offer</button>
+        )}
+        {(recovery.offer || recovery.error) && recovery.owner && (
+          <button
+            disabled={progress !== null}
+            onClick={() => void start(undefined, true)}
+          >
+            Discard recovery
+          </button>
+        )}
+        {recovery.owner && !recovery.offer && (
+          <button onClick={() => client.retryRecoverySaving()}>
+            Retry saving
+          </button>
+        )}
+        {!recovery.owner && (
+          <button onClick={() => void client.retryRecoveryOwnership()}>
+            Retry recovery ownership
+          </button>
+        )}
+        {recovery.error && (
+          <p role="alert">
+            {recovery.error} Last successful snapshot is retained unless
+            explicitly discarded.
+          </p>
+        )}
+      </section>
       <h2 id="import-heading">Session import</h2>
       <p>
         Import a session ZIP. Different sample rates require your consent before
@@ -127,7 +216,9 @@ export function SessionImport({
         <h2 id="import-confirm-heading">
           {confirming?.kind === 'conversion'
             ? 'Convert sample rate?'
-            : 'Replace current session?'}
+            : confirming?.kind === 'discard'
+              ? 'Discard recovery snapshot?'
+              : 'Replace current session?'}
         </h2>
         {confirming?.kind === 'conversion' ? (
           <p>
@@ -136,6 +227,11 @@ export function SessionImport({
             sample values and may affect fidelity. Lowering the sample rate
             loses high-frequency content. Your current session stays intact
             until replacement is confirmed.
+          </p>
+        ) : confirming?.kind === 'discard' ? (
+          <p>
+            This deletes the browser recovery snapshot. Your current live
+            recordings remain unchanged.
           </p>
         ) : (
           <p>
@@ -149,7 +245,9 @@ export function SessionImport({
         <button onClick={() => answer.current?.(true)}>
           {confirming?.kind === 'conversion'
             ? 'Convert session'
-            : 'Replace session'}
+            : confirming?.kind === 'discard'
+              ? 'Discard snapshot'
+              : 'Replace session'}
         </button>
       </dialog>
       {message && <p role="status">{message}</p>}

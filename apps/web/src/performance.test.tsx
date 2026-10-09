@@ -11,10 +11,20 @@ const host = vi.hoisted(() => ({
   switchInput: vi.fn(),
   stopTransport: vi.fn(),
   startTracks: vi.fn(),
+  recovery: {
+    status: 'Recovery disabled.',
+    owner: false,
+    offer: null,
+    savedAt: null,
+    error: null,
+    offerVisible: true,
+  },
 }));
 vi.mock('@loopbeats/audio-client', () => ({
   AudioClient: class {
     getSnapshot = () => host.snapshot;
+    getRecoverySnapshot = () => host.recovery;
+    enableRecovery = () => () => {};
     subscribe = (listener: () => void) => {
       host.listeners.add(listener);
       return () => host.listeners.delete(listener);
