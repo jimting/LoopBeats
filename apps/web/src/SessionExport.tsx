@@ -4,9 +4,11 @@ import type { AudioClient } from '@loopbeats/audio-client';
 export function SessionExport({
   client,
   enabled,
+  onBusy,
 }: {
   client: AudioClient;
   enabled: boolean;
+  onBusy?: (busy: boolean) => void;
 }) {
   const operation = useRef<AbortController | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -16,6 +18,7 @@ export function SessionExport({
   const start = async () => {
     const controller = new AbortController();
     operation.current = controller;
+    onBusy?.(true);
     setProgress(0);
     setError('');
     setMessage('');
@@ -46,6 +49,7 @@ export function SessionExport({
     } finally {
       operation.current = null;
       setProgress(null);
+      onBusy?.(false);
     }
   };
   return (

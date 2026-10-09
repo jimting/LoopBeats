@@ -297,6 +297,14 @@ summary {
   align-items: center;
   gap: 12px;
 }
+input[type='file'] {
+  min-height: 44px;
+  min-width: 0;
+  max-width: 100%;
+}
+input[type='file']::file-selector-button {
+  min-height: 44px;
+}
 .destructive-controls {
   border-top: 1px solid #91a2b9;
   margin-top: 16px;
