@@ -110,7 +110,7 @@ exporting. Playback can continue. Cancel or failure leaves the live session
 unchanged. This slice provides export only; import and automatic recovery follow
 in #51–#54. See [the export contract](docs/specs/session-export-50.md).
 
-## Same-rate session import (#51)
+## Session import (#51, #52)
 
 Start audio, finish any recording/overdub, then select **Import session** in
 Settings and choose an exported session ZIP. The complete archive is validated
@@ -119,8 +119,12 @@ defaults to Cancel. You can cancel validation or transfer; live playback can
 continue until replacement. Changing the current session during import requires
 a retry. Imported recordings are Stopped, transport is zero, and monitoring is
 off. Modes, track gains/mutes, master gain, shared cycle and raw samples are
-preserved. Unsupported or different-rate files leave the session unchanged;
-sample-rate conversion follows in #52. See [the import contract](docs/specs/session-import-51.md).
+preserved for same-rate imports. Different-rate files show both rates and a
+fidelity warning before conversion; lowering the rate loses high-frequency
+content. Conversion starts only after you accept, followed by replacement
+confirmation when recordings exist. Unsupported files and canceled or failed
+imports leave the session unchanged. See [the import contract](docs/specs/session-import-51.md)
+and [the conversion contract](docs/specs/session-conversion-52.md).
 
 ## Rust/WASM audio experiment (#6)
 

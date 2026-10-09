@@ -228,7 +228,13 @@ test('invalid and different-rate files preserve the current recording', async ({
     page.getByRole('status').filter({ hasText: 'Session imported.' }),
   ).toBeVisible();
   await input.setInputFiles(await archive(44100));
-  await expect(page.getByRole('alert')).toContainText('sample rate');
+  await expect(
+    page.getByRole('dialog', { name: 'Convert sample rate?' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Import canceled.' }),
+  ).toBeVisible();
   const damaged = await archive();
   damaged.buffer[500] ^= 1;
   await input.setInputFiles(damaged);

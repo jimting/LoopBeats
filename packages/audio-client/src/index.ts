@@ -9,6 +9,7 @@ import type {
 export type { AudioSnapshot } from '@loopbeats/domain';
 import { assembleSession, type ExportReply } from './session-export';
 import { parseSession } from './session-import';
+import { convertSession } from './session-conversion';
 type ImportReply = {
   type: 'import-reply';
   requestId: number;
@@ -650,6 +651,11 @@ export class AudioClient {
       onProgress?: (fraction: number) => void;
       onCommitting?: () => void;
       confirmReplace: (signal: AbortSignal) => Promise<boolean>;
+      confirmConversion?: (
+        sourceRate: number,
+        targetRate: number,
+        signal: AbortSignal,
+      ) => Promise<boolean>;
     },
   ): Promise<boolean> {
     const session = this.session;
@@ -748,16 +754,43 @@ export class AudioClient {
         await wait(file.arrayBuffer()),
         session.context.sampleRate,
         check,
+        true,
       );
-      await request('import-configure', { manifest: parsed.manifest });
-      const total = parsed.manifest.tracks.reduce(
+      let importSource = {
+        manifest: parsed.manifest,
+        read: async (id: number, offset: number, frames: number) =>
+          parsed.read(id, offset, frames),
+      };
+      if (parsed.manifest.sampleRate !== session.context.sampleRate) {
+        const planned = convertSession(
+          parsed,
+          session.context.sampleRate,
+          check,
+        );
+        if (!options.confirmConversion)
+          throw new Error(
+            'Sample-rate conversion needs explicit confirmation. Your recordings are unchanged.',
+          );
+        const accepted = await wait(
+          options.confirmConversion(
+            parsed.manifest.sampleRate,
+            session.context.sampleRate,
+            cancellation.signal,
+          ),
+        );
+        check();
+        if (!accepted) return false;
+        importSource = planned;
+      }
+      await request('import-configure', { manifest: importSource.manifest });
+      const total = importSource.manifest.tracks.reduce(
         (sum, t) => sum + t.lengthSamples,
         0,
       );
       let copied = 0;
-      for (const track of parsed.manifest.tracks) {
+      for (const track of importSource.manifest.tracks) {
         for (let offset = 0; offset < track.lengthSamples; offset += 2048) {
-          const samples = parsed.read(
+          const samples = await importSource.read(
             track.id,
             offset,
             Math.min(2048, track.lengthSamples - offset),
