@@ -6,8 +6,8 @@ import {
 import { parseSession } from '../../../../packages/audio-client/src/session-import';
 import { readFile } from 'node:fs/promises';
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => {
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() => {
     const original = window.AudioContext;
     window.AudioContext = class extends original {
       constructor(options?: AudioContextOptions) {
