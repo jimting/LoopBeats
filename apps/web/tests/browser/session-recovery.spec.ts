@@ -657,6 +657,7 @@ test('recovery discard defaults to Cancel and explicitly removes an unsupported 
 for (const invalid of [
   { startedAt: 1, captureKinds: ['Unsupported', null] },
   { startedAt: 1, captureKinds: [null] },
+  { startedAt: 1, captureKinds: [null, null], sparse: true },
   { startedAt: 1, captureKinds: [null, null], unexpected: 'extra metadata' },
 ]) {
   test(`invalid recovery checkpoint metadata fails closed: ${JSON.stringify(invalid)}`, async ({
@@ -665,6 +666,16 @@ for (const invalid of [
     await ready(page);
     await saved(page);
     await page.evaluate(async (progress) => {
+      const metadata =
+        'sparse' in progress
+          ? {
+              startedAt: progress.startedAt,
+              captureKinds: Object.assign(new Array<null>(2), {
+                0: null,
+                extra: 'invalid',
+              }),
+            }
+          : progress;
       await new Promise<void>((resolve, reject) => {
         const open = indexedDB.open('loopbeats.recovery.v1', 1);
         open.onsuccess = () => {
@@ -673,7 +684,7 @@ for (const invalid of [
           const store = transaction.objectStore('snapshot');
           const read = store.get('latest');
           read.onsuccess = () =>
-            store.put({ ...read.result, progress }, 'latest');
+            store.put({ ...read.result, progress: metadata }, 'latest');
           transaction.oncomplete = () => {
             db.close();
             resolve();

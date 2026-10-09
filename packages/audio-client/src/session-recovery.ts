@@ -130,7 +130,7 @@ export class RecoveryStorage {
           value.progress.startedAt > value.savedAt ||
           !Array.isArray(value.progress.captureKinds) ||
           value.progress.captureKinds.length !== 2 ||
-          Object.keys(value.progress.captureKinds).length !== 2 ||
+          Object.keys(value.progress.captureKinds).join(',') !== '0,1' ||
           value.progress.captureKinds.some(
             (kind) => kind !== null && !CAPTURE_KINDS.includes(kind),
           ))) ||

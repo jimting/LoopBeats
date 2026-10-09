@@ -36,8 +36,9 @@ both tracks in 2,814 chunks of at most 2,048 samples. It verifies known frozen
 raw values, rejects oversized reads and checks that WASM memory does not grow.
 CPU and read durations are logged separately by the test.
 
-A focused local run measured 29.8 ms for baseline processing, 36.8 ms for
-processing with freezing, and 26.6 ms for bounded reads across both tracks.
+The first Linux CI run measured 27.4 ms for baseline processing, 35.5 ms for
+processing with freezing, and 22.7 ms for bounded reads across both tracks.
+WASM memory remained 50,135,040 bytes before/after checkpoint processing and reads.
 Those times describe aggregate synchronous WASM fixture work on this machine;
 they exclude message round trips, archive assembly and storage. They are not
 callback deadlines, hardware latency, guaranteed recovery intervals or listening
@@ -66,7 +67,11 @@ Local TypeScript, ESLint, Prettier (native checkout line endings), Vitest,
 production-browser, Rust formatting/Clippy and WASM checks cover this change.
 Native Rust execution requires CI on this Windows setup because MSVC
 `link.exe` is unavailable; compilation and Clippy include the test targets.
-CI runs the native tests and allocation fixture.
+The [first CI run](https://github.com/ty-jt-agent/LoopBeats/actions/runs/37960798008)
+passed the native tests and allocation fixture, all web checks and 141 browser
+tests. A final sparse-metadata regression adds one browser test; exact array keys
+reject missing indices hidden by extra properties. Its final CI evidence is
+available from PR #59 checks.
 
 Manual verification: deferred to #19. Affected cases M03–M06, M09 and M10 in
 [the shared catalog](manual-validation.md). No physical listening pass is claimed.
