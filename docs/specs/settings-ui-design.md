@@ -2,6 +2,10 @@
 
 Status: draft; grouping agreed, interaction decisions under discussion.
 
+The eight questions below now have concrete recommendations in the
+[Settings interaction contract for #62](settings-interaction-contract-62.md).
+That contract awaits owner review; it does not yet unlock implementation.
+
 ## Problem
 
 The current Settings disclosure mixes session file operations, lengthy recovery
