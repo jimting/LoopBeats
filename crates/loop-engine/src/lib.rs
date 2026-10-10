@@ -62,6 +62,7 @@ pub struct LoopEngine {
     command_revision: u32,
     staging: [Track; 2],
     import: Option<(ImportMetadata, u32, [usize; 2])>,
+    checkpoint: Option<ImportMetadata>,
     master_gain: f32,
     monitoring: bool,
     tracks: [Track; 2],
@@ -113,6 +114,7 @@ impl LoopEngine {
             command_revision: 0,
             staging: bank(),
             import: None,
+            checkpoint: None,
             master_gain: 1.0,
             monitoring: false,
             tracks: std::array::from_fn(|_| Track {
@@ -139,6 +141,9 @@ impl LoopEngine {
         self.import = None;
     }
     pub fn begin_import(&mut self, metadata: ImportMetadata, revision: u32) -> bool {
+        if self.checkpoint.is_some() {
+            return false;
+        }
         self.import = None;
         let capacity = self.tracks[0].recording.capacity();
         if revision == u32::MAX
@@ -255,6 +260,99 @@ impl LoopEngine {
     pub fn recording_revision(&self, track_id: usize) -> u32 {
         self.tracks.get(track_id).map_or(0, |track| track.revision)
     }
+    /// Freeze metadata in constant time. Samples are preserved lazily before writes.
+    pub fn begin_checkpoint(&mut self) -> Option<ImportMetadata> {
+        if self.import.is_some()
+            || self.checkpoint.is_some()
+            || self
+                .staging
+                .iter()
+                .any(|t| !t.recording.can_begin_capture())
+        {
+            return None;
+        }
+        let tracks = std::array::from_fn(|id| {
+            let track = &self.tracks[id];
+            ImportTrack {
+                length: if track.state == TrackState::Empty
+                    || (track.state == TrackState::Recording && track.captured == 0)
+                {
+                    0
+                } else {
+                    track.length
+                },
+                mode: track.mode,
+                gain: track.gain,
+                muted: track.muted,
+            }
+        });
+        let cycle_length = if self.transport.cycle_length == 0 {
+            self.tracks
+                .iter()
+                .find(|t| {
+                    t.state == TrackState::Recording
+                        && t.mode == PlaybackMode::Loop
+                        && t.captured > 0
+                })
+                .map_or(0, |t| t.captured)
+        } else {
+            self.transport.cycle_length
+        };
+        if tracks
+            .iter()
+            .any(|t| t.mode == PlaybackMode::Loop && t.length > 0 && t.length != cycle_length)
+        {
+            return None;
+        }
+        let metadata = ImportMetadata {
+            cycle_length,
+            master_gain: self.master_gain,
+            tracks,
+        };
+        for track in &mut self.staging {
+            track.recording.begin_capture();
+        }
+        self.checkpoint = Some(metadata);
+        Some(metadata)
+    }
+    pub fn checkpoint_metadata(&self) -> Option<ImportMetadata> {
+        self.checkpoint
+    }
+    pub fn cancel_checkpoint(&mut self) {
+        self.checkpoint = None;
+    }
+    fn freeze_position(&mut self, id: usize, position: usize) {
+        if self
+            .checkpoint
+            .is_some_and(|m| position < m.tracks[id].length)
+            && !self.staging[id].recording.is_written(position)
+        {
+            let value = self.tracks[id].recording.read(position);
+            self.staging[id].recording.write(position, value);
+        }
+    }
+    /// Bounded reads return the same boundary's raw audio despite subsequent capture.
+    pub fn read_checkpoint(&mut self, id: usize, offset: usize, output: &mut [f32]) -> bool {
+        let Some(metadata) = self.checkpoint else {
+            return false;
+        };
+        if id >= 2
+            || output.len() > 2048
+            || offset > metadata.tracks[id].length
+            || output.len() > metadata.tracks[id].length - offset
+        {
+            return false;
+        }
+        for (index, sample) in output.iter_mut().enumerate() {
+            self.freeze_position(id, offset + index);
+            *sample = self.staging[id].recording.read(offset + index);
+            if !sample.is_finite() {
+                self.cancel_checkpoint();
+                return false;
+            }
+        }
+        true
+    }
     /// Read completed audio without exposing storage or allocating on the audio thread.
     pub fn read_recording(
         &self,
@@ -313,6 +411,7 @@ impl LoopEngine {
                 self.tracks[track_id].state = TrackState::Overdubbing
             }
             TrackState::Empty => {
+                self.cancel_checkpoint();
                 let track = &mut self.tracks[track_id];
                 track.revision = track.revision.saturating_add(1);
                 track.recording.begin_capture();
@@ -382,6 +481,9 @@ impl LoopEngine {
     /// Remove a recording in constant time; fresh capture invalidates old storage lazily.
     pub fn clear(&mut self, track_id: usize) {
         self.mutate();
+        if track_id < self.tracks.len() {
+            self.cancel_checkpoint();
+        }
         if let Some(track) = self.tracks.get_mut(track_id) {
             track.revision = track.revision.saturating_add(1);
             track.state = TrackState::Empty;
@@ -407,6 +509,9 @@ impl LoopEngine {
     }
     pub fn stop_transport(&mut self) {
         self.mutate();
+        if self.tracks.iter().any(|t| t.state == TrackState::Recording) {
+            self.cancel_checkpoint();
+        }
         for track in &mut self.tracks {
             track.one_shot_position = 0;
             match track.state {
@@ -497,14 +602,22 @@ impl LoopEngine {
             let source = input.get(index).copied().unwrap_or(0.0);
             let mut sample = if self.monitoring { source } else { 0.0 };
             for track_id in 0..self.tracks.len() {
+                let live = &self.tracks[track_id];
+                let independent =
+                    live.mode == PlaybackMode::OneShot || self.transport.cycle_length == 0;
+                let capture_position = if live.state == TrackState::Recording && independent {
+                    live.captured
+                } else {
+                    phase
+                };
+                if matches!(live.state, TrackState::Recording | TrackState::Overdubbing) {
+                    self.freeze_position(track_id, capture_position);
+                }
                 let track = &mut self.tracks[track_id];
                 match track.state {
                     TrackState::Empty | TrackState::Stopped => {}
                     TrackState::Recording => {
-                        let independent =
-                            track.mode == PlaybackMode::OneShot || self.transport.cycle_length == 0;
-                        let position = if independent { track.captured } else { phase };
-                        track.recording.write(position, source);
+                        track.recording.write(capture_position, source);
                         track.captured += 1;
                         if independent {
                             track.length = track.captured;
@@ -880,6 +993,45 @@ mod wasm {
     #[no_mangle]
     pub extern "C" fn recording_revision(track_id: usize) -> u32 {
         with_engine(|engine| engine.recording_revision(track_id))
+    }
+    #[no_mangle]
+    pub extern "C" fn checkpoint_begin() -> u32 {
+        with_engine(|engine| engine.begin_checkpoint().is_some() as u32)
+    }
+    #[no_mangle]
+    pub extern "C" fn checkpoint_cancel() {
+        with_engine(|engine| engine.cancel_checkpoint());
+    }
+    #[no_mangle]
+    pub extern "C" fn checkpoint_length(id: usize) -> usize {
+        with_engine(|engine| {
+            engine
+                .checkpoint_metadata()
+                .and_then(|m| m.tracks.get(id).map(|t| t.length))
+                .unwrap_or(0)
+        })
+    }
+    #[no_mangle]
+    pub extern "C" fn checkpoint_cycle() -> usize {
+        with_engine(|engine| engine.checkpoint_metadata().map_or(0, |m| m.cycle_length))
+    }
+    #[no_mangle]
+    pub extern "C" fn checkpoint_active() -> u32 {
+        with_engine(|engine| engine.checkpoint_metadata().is_some() as u32)
+    }
+    #[no_mangle]
+    pub extern "C" fn read_checkpoint(id: usize, offset: usize, frames: usize) -> u32 {
+        if frames > CAPACITY {
+            return 0;
+        }
+        // SAFETY: fixed transfer buffer and serialized worklet host.
+        with_engine(|engine| unsafe {
+            engine.read_checkpoint(
+                id,
+                offset,
+                core::slice::from_raw_parts_mut(output_ptr(), frames),
+            ) as u32
+        })
     }
     #[no_mangle]
     pub extern "C" fn read_recording(

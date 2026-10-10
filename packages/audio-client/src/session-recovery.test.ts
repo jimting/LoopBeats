@@ -61,6 +61,8 @@ function fixture(initial: RecoveryRecord | null = null) {
   let releaseDeletion: (() => void) | undefined;
   let waitRead: Promise<void> | undefined;
   let releaseRead: (() => void) | undefined;
+  let waitCheckpoint: Promise<void> | undefined;
+  let releaseCheckpoint: (() => void) | undefined;
   const storage = {
     read: async () => {
       await waitRead;
@@ -80,7 +82,14 @@ function fixture(initial: RecoveryRecord | null = null) {
     {
       snapshot: () => snapshot,
       available: () => true,
-      export: async () => new Blob(['completed samples']),
+      checkpoint: async () => {
+        const startedAt = Date.now();
+        await waitCheckpoint;
+        return {
+          archive: new Blob(['checkpoint samples']),
+          progress: { startedAt, captureKinds: [null, null] },
+        };
+      },
       notify: () => {},
     },
     storage,
@@ -107,12 +116,51 @@ function fixture(initial: RecoveryRecord | null = null) {
       });
     },
     releaseRead: () => releaseRead?.(),
+    holdCheckpoint: () => {
+      waitCheckpoint = new Promise<void>((resolve) => {
+        releaseCheckpoint = resolve;
+      });
+    },
+    releaseCheckpoint: () => releaseCheckpoint?.(),
     update: (value: AudioSnapshot) => {
       snapshot = value;
       recovery.observe(value, [0, 0]);
     },
   };
 }
+
+test('slow transfer preserves five-second deadlines and coalesces an overdue checkpoint', async () => {
+  const {
+    recovery,
+    snapshot,
+    update,
+    writes,
+    holdCheckpoint,
+    releaseCheckpoint,
+  } = fixture();
+  await recovery.initialize();
+  update({
+    ...snapshot,
+    tracks: [{ ...snapshot.tracks[0], state: 'Recording' }, snapshot.tracks[1]],
+  });
+  holdCheckpoint();
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(writes()).toBe(0);
+  releaseCheckpoint();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(writes()).toBe(1);
+  await vi.advanceTimersByTimeAsync(2999);
+  expect(writes()).toBe(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(writes()).toBe(2);
+  holdCheckpoint();
+  await vi.advanceTimersByTimeAsync(11000);
+  expect(writes()).toBe(2);
+  releaseCheckpoint();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(writes()).toBe(4);
+  recovery.dispose();
+});
 
 test('eligible changes debounce and save despite continuous changes at five seconds', async () => {
   const { recovery, snapshot, read } = fixture();
@@ -168,7 +216,7 @@ test('initialization waiting for release cannot acquire a lock after a newer dis
   recovery.dispose();
 });
 
-test('overdub pauses saves until completion while playback progression alone is ignored', async () => {
+test('overdub checkpoints every five seconds and completion saves promptly; playback alone is ignored', async () => {
   const { recovery, snapshot, update, writes } = fixture();
   await recovery.initialize();
   await vi.advanceTimersByTimeAsync(1000);
@@ -188,14 +236,18 @@ test('overdub pauses saves until completion while playback progression alone is 
     ] as AudioSnapshot['tracks'],
   };
   update(overdub);
-  await vi.advanceTimersByTimeAsync(10000);
+  await vi.advanceTimersByTimeAsync(4999);
   expect(writes()).toBe(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(writes()).toBe(2);
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(writes()).toBe(3);
   update({
     ...overdub,
     tracks: [{ ...overdub.tracks[0], state: 'Stopped' }, overdub.tracks[1]],
   });
   await vi.advanceTimersByTimeAsync(1000);
-  expect(writes()).toBe(2);
+  expect(writes()).toBe(4);
   recovery.dispose();
 });
 

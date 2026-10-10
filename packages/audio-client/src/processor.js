@@ -35,6 +35,9 @@ class LoopProcessor extends AudioWorkletProcessor {
     this.exportSession = null;
     this.importSession = null;
     this.port.onmessage = ({ data }) => {
+      const checkpoint = data.type.startsWith('checkpoint-');
+      if (checkpoint)
+        data = { ...data, type: data.type.replace('checkpoint-', 'export-') };
       if (data.type.startsWith('import-')) {
         const reply = { type: 'import-reply', requestId: data.requestId };
         try {
@@ -139,17 +142,32 @@ class LoopProcessor extends AudioWorkletProcessor {
         data.type === 'export-finish'
       ) {
         const reply = { type: 'export-reply', requestId: data.requestId };
+        let ownsOperation = false;
         try {
           if (this.failed) throw new Error('Audio processor is unavailable.');
           if (data.type === 'export-begin') {
-            if (this.importSession)
-              throw new Error('Import is already in progress.');
             if (
+              this.importSession ||
+              (this.exportSession && data.requestId <= this.exportSession.token)
+            )
+              throw new Error('A session operation is already in progress.');
+            // A newer operation supersedes an abandoned transfer even if cancellation
+            // could not reach the port. Older tokens cannot take its ownership.
+            if (this.exportSession?.checkpoint) this.engine.checkpoint_cancel();
+            this.exportSession = null;
+            if (
+              !checkpoint &&
               [0, 1].some(
                 (id) => this.engine.track_state(id) === TRACK_STATE.Overdubbing,
               )
             )
               throw new Error('Finish overdub before exporting.');
+            ownsOperation = true;
+            if (checkpoint && !this.engine.checkpoint_begin())
+              throw new Error(
+                'Recovery checkpoint is incompatible or unavailable. Previous snapshot retained.',
+              );
+            if (checkpoint) reply.checkpointStartedAt = Date.now();
             const tracks = [0, 1].map((id) => {
               const completed = [
                 TRACK_STATE.Playing,
@@ -160,12 +178,22 @@ class LoopProcessor extends AudioWorkletProcessor {
                 mode: this.engine.playback_mode(id) === 1 ? 'OneShot' : 'Loop',
                 gain: this.engine.track_gain(id),
                 muted: Boolean(this.engine.track_muted(id)),
-                lengthSamples: completed ? this.engine.loop_length(id) : 0,
-                audioPath: completed ? `tracks/${id}.wav` : null,
+                lengthSamples: checkpoint
+                  ? this.engine.checkpoint_length(id)
+                  : completed
+                    ? this.engine.loop_length(id)
+                    : 0,
+                audioPath: (
+                  checkpoint ? this.engine.checkpoint_length(id) > 0 : completed
+                )
+                  ? `tracks/${id}.wav`
+                  : null,
               };
             });
             this.exportSession = {
               token: data.requestId,
+              checkpoint,
+              deadline: this.frames + sampleRate * 30,
               tracks,
               revisions: [0, 1].map((id) => this.engine.recording_revision(id)),
             };
@@ -173,16 +201,43 @@ class LoopProcessor extends AudioWorkletProcessor {
               format: 'LoopBeatsSession',
               version: 1,
               sampleRate,
-              cycleLengthSamples: this.engine.cycle_length(),
+              cycleLengthSamples: checkpoint
+                ? this.engine.checkpoint_cycle()
+                : this.engine.cycle_length(),
               masterGain: this.engine.master_gain(),
               tracks,
             };
+            if (checkpoint)
+              reply.captureKinds = [0, 1].map((id) => {
+                const state = this.engine.track_state(id);
+                return state === TRACK_STATE.Overdubbing
+                  ? 'Overdub'
+                  : state !== TRACK_STATE.Recording
+                    ? null
+                    : this.engine.playback_mode(id) === 1
+                      ? 'OneShot'
+                      : this.engine.cycle_length() === 0
+                        ? 'FirstLoop'
+                        : 'JoinedLoop';
+              });
           } else {
             const session = this.exportSession;
-            if (!session || session.token !== data.token)
+            ownsOperation = Boolean(
+              session &&
+              session.token === data.token &&
+              session.checkpoint === checkpoint,
+            );
+            if (
+              !session ||
+              session.token !== data.token ||
+              session.checkpoint !== checkpoint ||
+              (checkpoint && !this.engine.checkpoint_active())
+            )
               throw new Error('Export was canceled.');
+            session.deadline = this.frames + sampleRate * 30;
             for (const track of session.tracks) {
               if (
+                !checkpoint &&
                 track.audioPath &&
                 (this.engine.recording_revision(track.id) !==
                   session.revisions[track.id] ||
@@ -202,20 +257,32 @@ class LoopProcessor extends AudioWorkletProcessor {
                 data.frames < 1 ||
                 data.frames > 2048 ||
                 data.offset + data.frames > track.lengthSamples ||
-                !this.engine.read_recording(
-                  data.trackId,
-                  session.revisions[data.trackId],
-                  data.offset,
-                  data.frames,
-                )
+                !(checkpoint
+                  ? this.engine.read_checkpoint(
+                      data.trackId,
+                      data.offset,
+                      data.frames,
+                    )
+                  : this.engine.read_recording(
+                      data.trackId,
+                      session.revisions[data.trackId],
+                      data.offset,
+                      data.frames,
+                    ))
               )
                 throw new Error('Recording is no longer exportable.');
               reply.samples = this.output.slice(0, data.frames);
-            } else this.exportSession = null;
+            } else {
+              if (checkpoint) this.engine.checkpoint_cancel();
+              this.exportSession = null;
+            }
           }
         } catch (error) {
           reply.error = error.message;
-          this.exportSession = null;
+          if (ownsOperation) {
+            if (checkpoint) this.engine.checkpoint_cancel();
+            this.exportSession = null;
+          }
         }
         this.port.postMessage(
           reply,
@@ -224,7 +291,13 @@ class LoopProcessor extends AudioWorkletProcessor {
         return;
       }
       if (data.type === 'export-cancel') {
-        if (this.exportSession?.token === data.token) this.exportSession = null;
+        if (
+          this.exportSession?.token === data.token &&
+          this.exportSession.checkpoint === checkpoint
+        ) {
+          if (this.exportSession.checkpoint) this.engine.checkpoint_cancel();
+          this.exportSession = null;
+        }
         return;
       }
       if (data.type === 'monitoring' && !this.failed)
@@ -380,6 +453,13 @@ class LoopProcessor extends AudioWorkletProcessor {
       this.engine.track_state(1) === TRACK_STATE.Overdubbing
         ? Math.max(outputPeak, this.outputLevel * 0.999)
         : 0;
+    if (
+      this.exportSession?.checkpoint &&
+      this.frames >= this.exportSession.deadline
+    ) {
+      this.engine.checkpoint_cancel();
+      this.exportSession = null;
+    }
     this.frames += count;
     return true;
   }

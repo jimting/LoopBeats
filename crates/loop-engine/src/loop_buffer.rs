@@ -28,12 +28,15 @@ impl LoopBuffer {
         self.generation += 1;
     }
     pub fn read(&self, position: usize) -> f32 {
-        let word = self.validity[position / 64];
-        if word.generation == self.generation && word.bits & (1 << (position % 64)) != 0 {
+        if self.is_written(position) {
             self.samples[position]
         } else {
             0.0
         }
+    }
+    pub fn is_written(&self, position: usize) -> bool {
+        let word = self.validity[position / 64];
+        word.generation == self.generation && word.bits & (1 << (position % 64)) != 0
     }
     pub fn write(&mut self, position: usize, sample: f32) {
         let word = &mut self.validity[position / 64];

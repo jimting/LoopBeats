@@ -1,4 +1,5 @@
 import type { PlaybackMode } from '@loopbeats/domain';
+import type { CheckpointInfo } from './session-recovery';
 
 export interface ExportManifest {
   format: 'LoopBeatsSession';
@@ -21,6 +22,8 @@ export interface ExportReply {
   error?: string;
   manifest?: ExportManifest;
   samples?: Float32Array;
+  captureKinds?: CheckpointInfo['captureKinds'];
+  checkpointStartedAt?: number;
 }
 const ARCHIVE_LIMIT = 96 * 1024 * 1024;
 const CHUNK = 2048;

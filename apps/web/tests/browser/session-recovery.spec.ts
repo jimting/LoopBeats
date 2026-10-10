@@ -393,7 +393,7 @@ test('completed recording is offered after reload and recovered only on request'
   await expect(track.getByTestId('loop-length')).toHaveText(length!);
 });
 
-test('unfinished One-shot capture is excluded while the completed Loop remains recoverable', async ({
+test('unfinished One-shot prefix is checkpointed while the completed Loop remains recoverable', async ({
   page,
 }) => {
   await ready(page);
@@ -433,16 +433,25 @@ test('unfinished One-shot capture is excluded while the completed Loop remains r
   await page
     .getByRole('button', { name: 'Recover session', exact: true })
     .click();
-  await expect(second.getByTestId('track-state')).toHaveText('Empty');
+  await expect(second.getByTestId('track-state')).toHaveText('Stopped');
   const recovered = await rawExport(page);
+  expect(recovered.manifest.tracks[1].lengthSamples).toBeGreaterThan(48000);
   expect(recovered.manifest.masterGain).toBeCloseTo(0.6, 6);
   expect(recovered.manifest.tracks[0].lengthSamples).toBe(48000);
   expect(Array.from(recovered.read(0, 0, 3))).toEqual([0.25, -0.5, 0.75]);
 });
 
-test('active overdub defers checkpoint and reload offers the previous completed audio', async ({
+test('active overdub checkpoints additions and reload offers stopped partial work', async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    AudioContext.prototype.createMediaStreamSource = function () {
+      const source = this.createConstantSource();
+      source.offset.value = 0.125;
+      source.start();
+      return source as unknown as MediaStreamAudioSourceNode;
+    };
+  });
   await ready(page);
   await page
     .getByLabel('Import session', { exact: true })
@@ -454,23 +463,31 @@ test('active overdub defers checkpoint and reload offers the previous completed 
   await first.getByRole('button', { name: /REC\/PLAY/ }).click();
   await expect(first.getByTestId('track-state')).toHaveText('Overdubbing');
   await expect(page.getByTestId('recovery-status')).toContainText(
-    'Paused during overdub',
+    'Changes not yet saved.',
   );
   await page
     .getByRole('slider', { name: 'Master volume', exact: true })
     .fill('0.8');
   await expect(page.getByTestId('recovery-status')).toContainText(
-    'Paused during overdub',
+    'Changes not yet saved.',
   );
+  await saved(page);
+  await expect(first.getByTestId('track-state')).toHaveText('Overdubbing');
   await reloadOffer(page);
+  await expect(
+    page.getByText(/Recovery contains partial recording/),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Start audio', exact: true }).click();
   await page
     .getByRole('button', { name: 'Recover session', exact: true })
     .click();
   await expect(first.getByTestId('track-state')).toHaveText('Stopped');
   const recovered = await rawExport(page);
-  expect(recovered.manifest.masterGain).toBe(0.5);
-  expect(Array.from(recovered.read(0, 0, 3))).toEqual([0.25, -0.5, 0.75]);
+  expect(recovered.manifest.masterGain).toBeCloseTo(0.8, 6);
+  expect(recovered.manifest.tracks[0].lengthSamples).toBe(48000);
+  expect(Array.from(recovered.read(0, 0, 2048))).not.toEqual(
+    Array.from({ length: 2048 }, (_, i) => [0.25, -0.5, 0.75][i % 3]),
+  );
 });
 
 test('reset checkpoints Empty tracks without resurrecting recordings after reload', async ({
@@ -503,6 +520,87 @@ test('reset checkpoints Empty tracks without resurrecting recordings after reloa
   const recovered = await rawExport(page);
   expect(recovered.manifest.cycleLengthSamples).toBe(0);
   expect(recovered.manifest.tracks.map((t) => t.lengthSamples)).toEqual([0, 0]);
+});
+
+test('global STOP retains initial capture on deletion failure and discards it only after retry', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    let fail = true;
+    window.addEventListener('allow-recovery-delete', () => {
+      fail = false;
+    });
+    const remove = IDBObjectStore.prototype.delete;
+    IDBObjectStore.prototype.delete = function (
+      ...args: Parameters<IDBObjectStore['delete']>
+    ) {
+      const request = remove.apply(this, args);
+      if (fail && this.transaction.db.name === 'loopbeats.recovery.v1')
+        queueMicrotask(() => this.transaction.abort());
+      return request;
+    };
+  });
+  await ready(page);
+  const first = page.locator('.track-strip').nth(0);
+  await first.getByRole('button', { name: /REC\/PLAY/ }).click();
+  await expect(first.getByTestId('track-state')).toHaveText('Recording');
+  await saved(page);
+  await page.getByRole('button', { name: 'Global STOP', exact: true }).click();
+  await expect(page.getByTestId('recovery-status')).toContainText('failed');
+  await expect(first.getByTestId('track-state')).toHaveText('Recording');
+  await page.evaluate(() =>
+    window.dispatchEvent(new Event('allow-recovery-delete')),
+  );
+  await page.getByRole('button', { name: 'Global STOP', exact: true }).click();
+  await expect(first.getByTestId('track-state')).toHaveText('Empty');
+  await saved(page);
+  await reloadOffer(page);
+  await page.getByRole('button', { name: 'Start audio', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Recover session', exact: true })
+    .click();
+  await expect(first.getByTestId('track-state')).toHaveText('Empty');
+  expect((await rawExport(page)).manifest.tracks[0].lengthSamples).toBe(0);
+});
+
+test('first Loop recovers its frozen prefix while manual ZIP still omits active initial capture', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    AudioContext.prototype.createMediaStreamSource = function () {
+      const source = this.createConstantSource();
+      source.offset.value = 0.125;
+      source.start();
+      return source as unknown as MediaStreamAudioSourceNode;
+    };
+  });
+  await ready(page);
+  const first = page.locator('.track-strip').nth(0);
+  await first.getByRole('button', { name: /REC\/PLAY/ }).click();
+  await expect(first.getByTestId('track-state')).toHaveText('Recording');
+  await saved(page);
+  const manual = await rawExport(page);
+  expect(manual.manifest.tracks.map((track) => track.lengthSamples)).toEqual([
+    0, 0,
+  ]);
+  await reloadOffer(page);
+  await expect(
+    page.getByText(/Recovery contains partial recording/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Start audio', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Recover session', exact: true })
+    .click();
+  await expect(first.getByTestId('track-state')).toHaveText('Stopped');
+  await expect(page.getByTestId('transport-state')).toHaveText('Stopped');
+  await expect(page.getByText('Monitoring off', { exact: true })).toBeVisible();
+  const recovered = await rawExport(page);
+  const length = recovered.manifest.tracks[0].lengthSamples;
+  expect(length).toBeGreaterThan(48000);
+  expect(recovered.manifest.cycleLengthSamples).toBe(length);
+  expect(Array.from(recovered.read(0, length - 3, 3))).toEqual([
+    0.125, 0.125, 0.125,
+  ]);
 });
 
 test('recovery discard defaults to Cancel and explicitly removes an unsupported record', async ({
@@ -554,4 +652,104 @@ test('recovery discard defaults to Cancel and explicitly removes an unsupported 
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('button', { name: 'Start audio', exact: true }).click();
   await saved(page);
+});
+
+for (const invalid of [
+  { startedAt: 1, captureKinds: ['Unsupported', null] },
+  { startedAt: 1, captureKinds: [null] },
+  { startedAt: 1, captureKinds: [null, null], sparse: true },
+  { startedAt: 1, captureKinds: [null, null], unexpected: 'extra metadata' },
+]) {
+  test(`invalid recovery checkpoint metadata fails closed: ${JSON.stringify(invalid)}`, async ({
+    page,
+  }) => {
+    await ready(page);
+    await saved(page);
+    await page.evaluate(async (progress) => {
+      const metadata =
+        'sparse' in progress
+          ? {
+              startedAt: progress.startedAt,
+              captureKinds: Object.assign(new Array<null>(2), {
+                0: null,
+                extra: 'invalid',
+              }),
+            }
+          : progress;
+      await new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open('loopbeats.recovery.v1', 1);
+        open.onsuccess = () => {
+          const db = open.result;
+          const transaction = db.transaction('snapshot', 'readwrite');
+          const store = transaction.objectStore('snapshot');
+          const read = store.get('latest');
+          read.onsuccess = () =>
+            store.put({ ...read.result, progress: metadata }, 'latest');
+          transaction.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          transaction.onabort = () => {
+            db.close();
+            reject(transaction.error);
+          };
+        };
+        open.onerror = () => reject(open.error);
+      });
+    }, invalid);
+    await page.reload();
+    await page
+      .locator('summary')
+      .filter({ hasText: /^Settings$/ })
+      .click();
+    await expect(page.getByRole('alert')).toContainText('unsupported recovery');
+    await expect(
+      page.getByRole('button', { name: 'Recover session', exact: true }),
+    ).toHaveCount(0);
+  });
+}
+
+test('older completed checkpoint without progress metadata still recovers', async ({
+  page,
+}) => {
+  await ready(page);
+  await page
+    .getByLabel('Import session', { exact: true })
+    .setInputFiles(await knownSession());
+  await saved(page);
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open('loopbeats.recovery.v1', 1);
+      open.onsuccess = () => {
+        const db = open.result;
+        const transaction = db.transaction('snapshot', 'readwrite');
+        const store = transaction.objectStore('snapshot');
+        const read = store.get('latest');
+        read.onsuccess = () => {
+          const record = read.result;
+          delete record.progress;
+          store.put(record, 'latest');
+        };
+        transaction.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        transaction.onabort = () => {
+          db.close();
+          reject(transaction.error);
+        };
+      };
+      open.onerror = () => reject(open.error);
+    });
+  });
+  await reloadOffer(page);
+  await expect(
+    page.getByText(/Recovery contains partial recording/),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Start audio', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Recover session', exact: true })
+    .click();
+  const recovered = await rawExport(page);
+  expect(Array.from(recovered.read(0, 0, 3))).toEqual([0.25, -0.5, 0.75]);
 });
