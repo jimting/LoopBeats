@@ -252,6 +252,11 @@ test('responsive Settings contains focus without stopping actual capture or play
   await expect(
     page.getByRole('region', { name: 'Settings', exact: true }),
   ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await track.getByRole('button', { name: 'Mute', exact: true }).click();
   await expect(track.getByTestId('track-state')).toHaveText('Playing');
   await page.getByRole('button', { name: 'Close Settings' }).click();
