@@ -71,8 +71,8 @@ Remove recordings area. Use this helper copy:
 
 - Save ZIP: Download a portable session with all completed track recordings and
   session settings. An unfinished recording is not included.
-- Load ZIP: Load a saved session. You will confirm before replacing the current
-  tracks. Imported recordings start stopped.
+- Load ZIP: Load a saved session. If current recordings exist, you will confirm
+  before replacing them. Imported recordings start stopped.
 
 Availability follows acknowledged client state, never a separate UI transport.
 The following conditions combine; any blocking condition disables the action.
@@ -92,8 +92,10 @@ Display labelled progress, explicit cancellation, and persistent result/error
 feedback. Successful export says ZIP download started; browser download initiation
 does not prove a file was written to disk. Import validates before replacement.
 If conversion/downgrading is required, explain the source and target rates and
-the conversion consequence, then obtain consent before converting. Afterwards
-confirm replacement separately. Cancellation, rejection and failure retain the
+the conversion consequence, then obtain consent before converting. Afterwards,
+if the current session contains recordings, confirm replacement separately.
+An empty workspace does not require replacement confirmation. Cancellation,
+rejection and failure retain the
 current session. Successful load restores all supported session data with tracks
 Stopped or Empty, transport reset and monitoring off; it does not restore device
 permissions or select an archived input device.
@@ -117,7 +119,8 @@ new recovery policy or persisted state machine.
 | Valid startup offer | Saved workspace available; Recover, Later and Discard saved workspace. |
 | Invalid saved record | Saved workspace could not be read; visible explanation and owner-only Discard saved workspace. No Recover. |
 | Save failed | Recovery could not be saved; error, retained last successful time and Retry saving. |
-| Storage unavailable | Recovery unavailable; explain the failure and recommend Save ZIP when eligible. Retry recovery rechecks availability. |
+| Storage unavailable | Recovery unavailable; explain the failure and recommend Save ZIP when eligible. Explain that reloading rechecks availability; do not promise a working retry through an unavailable controller. |
+| Initialization/storage read failed | Recovery could not be checked; show the error and explain that current recovery saving is paused. Recommend Save ZIP when eligible, then reload to check again. Do not expose saving/ownership retry as a read retry. |
 | Other tab owns storage | Recovery paused: another tab owns recovery; Retry ownership. Recover/discard/save retry are unavailable. |
 
 When an offer is discovered, show a compact notice beside Settings with View
@@ -142,6 +145,18 @@ and current recordings, shows the error and allows retrying the discard through
 confirmation. Retry saving is reserved for saving failure and does not substitute
 for retrying a failed destructive action. Ownership retry never promises takeover
 from an active owning tab.
+
+Initialization/read failures can share an existing generic error string with save
+failures. Distinguish them using existing offer/ownership/status and initialization
+outcome at the client presentation seam; if that outcome is not exposed, retain
+generic truthful failure copy and the Save ZIP/reload guidance, without promising
+an unsupported retry. This does not change storage initialization semantics.
+
+Recovery details must also explain the deletion gap: deletion-first actions such
+as CLEAR, replacement and global STOP during initial capture can remove the owned
+current checkpoint. Surviving recordings may have no recovery copy until the next
+successful save. Keep this warning alongside relevant destructive explanations;
+do not report surviving work as already protected by the deleted checkpoint.
 
 ## 5. Audio input
 
@@ -220,18 +235,18 @@ remain the observation seam; no hardware checklist gates these presentation tick
 | S06 | Reduced motion has no required animation; visible focus and status remain usable. |
 | S07 | Exercise every row and combined blockers of the ZIP matrix, including playback eligibility and completed-only export during initial capture. |
 | S08 | Start a ZIP transfer, change groups and close Settings; it continues, progress remains accessible and result/error can be reopened. Explicit cancellation preserves current tracks. |
-| S09 | Load a different-rate archive: conversion consent precedes conversion and replacement consent; cancel either retains current data. Successful load restores all supported data stopped. |
+| S09 | Load a different-rate archive: conversion consent precedes conversion and replacement consent when current recordings exist; an empty workspace skips replacement consent. Cancel either retains current data. Successful load restores all supported data stopped. |
 | S10 | During nested confirmation, Escape cancels only it; outside click cannot dismiss it; focus returns sensibly and no underlying panel dismissal occurs. |
 | S11 | Startup offer does not steal focus/start audio; Later hides notice, Session can reopen it, and current autosaving remains paused until the offer is resolved. |
 | S12 | Exercise checking, pending, saving, saved and failure recovery statuses with truthful saved times and relevant retries. |
 | S13 | Partial recovery discloses the saved prefix before replacement and after restoration; unfinished manual export is still excluded. |
-| S14 | Invalid storage, unavailable storage and other-tab ownership expose distinct explanations and only eligible recovery/discard/retry actions. |
+| S14 | Invalid records, unavailable storage, initialization/read failure and other-tab ownership expose truthful explanations and only supported actions; an owner-held read failure never offers a retry that cannot proceed. |
 | S15 | Discard confirmation/cancel/failure/success affects only recovery copy; failure retains it and live tracks; future autosaving remains possible. |
 | S16 | Before startup, Audio explains disabled input; ready/fallback/no devices/permission failure/switch pending/failure display acknowledged state. Running transport/capture blocks selection. |
 | S17 | Toggle Confirm before clearing before startup; it applies immediately, survives close/reopen and successful reload persistence, but never suppresses other confirmations. |
 | S18 | Force preference write failure; current visit keeps the new value, feedback reports failure, retry writes current values, and reload uses last successful values. |
 | S19 | Reset active and stopped work after confirmation; verify deletion barrier failure retains live data, successful reset consequences and preserved modes/gains/mute/preferences. |
-| S20 | Reset with unresolved old offer or other-tab ownership preserves that copy; stale pending import cannot overwrite a reset workspace; dismissing Settings causes no deletion. |
+| S20 | Reset with unresolved old offer or other-tab ownership preserves that copy; stale pending import cannot overwrite a reset workspace; dismissing Settings causes no deletion. CLEAR/replacement/global STOP deletion-gap explanations do not claim surviving work is saved before a new checkpoint succeeds. |
 
 ## Delivery and review gate
 
